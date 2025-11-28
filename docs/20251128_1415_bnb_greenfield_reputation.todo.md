@@ -1,12 +1,12 @@
 BNB Greenfield 声誉存储改造 TODO
 
-Phase 1：接口抽象与 IPFS 适配（最小改动）
-- [ ] 引入 `ReputationStorage` 抽象类（put/get）。
-- [ ] 将现有 IPFS 客户端包装为 `IpfsReputationStorage`，逻辑不变，仅实现接口。
-- [ ] 增加工厂 `create_reputation_storage`，默认返回 IPFS 实例。
-- [ ] 单元测试：
-  - [ ] 使用 fake/stub IPFS client，验证 put/get 调用的参数透传与返回值。
-  - [ ] 工厂在无配置时返回 IPFS，实现默认行为。
+Phase 1：接口抽象与 IPFS 适配（最小改动）✅
+- [x] 引入 `ReputationStorage` 抽象类（put/get）。
+- [x] 将现有 IPFS 客户端包装为 `IpfsReputationStorage`，逻辑不变，仅实现接口。
+- [x] 增加工厂 `create_reputation_storage`，默认返回 IPFS 实例。
+- [x] 单元测试：
+  - [x] 使用 fake/stub IPFS client，验证 put/get 调用的参数透传与返回值。
+  - [x] 工厂在无配置时返回 IPFS，实现默认行为。
 
 Phase 2：Greenfield 实现（HTTP PutObject/GetObject）
 - [ ] 新增 `greenfield_storage.py`，注入 `sp_host/bucket/private_key/txn_hash`，构造 Authorization 头并执行 PUT/GET。
