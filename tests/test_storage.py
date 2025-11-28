@@ -164,14 +164,6 @@ class TestStorageFactory:
         # Verify: Returns IpfsReputationStorage instance
         assert isinstance(storage, IpfsReputationStorage)
 
-    def test_factory_raises_for_greenfield_in_phase1(self):
-        """Test that factory raises NotImplementedError for Greenfield in Phase 1."""
-        # Execute & Verify: Should raise NotImplementedError for Greenfield
-        with pytest.raises(NotImplementedError) as exc_info:
-            create_reputation_storage(config={"REPUTATION_BACKEND": "greenfield"})
-
-        assert "Greenfield storage backend not yet implemented" in str(exc_info.value)
-
     def test_factory_falls_back_to_ipfs_for_unknown_backend(self):
         """Test that factory falls back to IPFS for unknown backend."""
         # Setup: Create mock IPFS client
