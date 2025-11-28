@@ -16,6 +16,18 @@ from .storage_interfaces import ReputationStorage
 
 logger = logging.getLogger(__name__)
 
+# Import Greenfield storage lazily to avoid dependency issues
+def _import_greenfield_storage():
+    """Lazy import of GreenfieldReputationStorage to avoid requiring eth-utils when not needed."""
+    try:
+        from .greenfield_storage import GreenfieldReputationStorage
+        return GreenfieldReputationStorage
+    except ImportError as e:
+        raise ImportError(
+            "Greenfield storage requires additional dependencies. "
+            "Install with: pip install eth-utils>=2.0.0"
+        ) from e
+
 
 def create_reputation_storage(
     config: Optional[Dict[str, Any]] = None,
@@ -52,18 +64,46 @@ def create_reputation_storage(
     logger.info(f"Creating reputation storage with backend: {backend}")
 
     if backend == "greenfield":
-        # Phase 2: Greenfield implementation will be added here
-        # For now, raise NotImplementedError
-        raise NotImplementedError(
-            "Greenfield storage backend not yet implemented. "
-            "Please use 'ipfs' backend or wait for Phase 2 completion."
+        # Phase 2: Greenfield implementation
+        GreenfieldReputationStorage = _import_greenfield_storage()
+
+        # Load Greenfield configuration
+        sp_host = cfg.get("GREENFIELD_SP_HOST") or os.getenv("GREENFIELD_SP_HOST")
+        bucket = cfg.get("GREENFIELD_BUCKET") or os.getenv("GREENFIELD_BUCKET")
+        private_key = cfg.get("GREENFIELD_PRIVATE_KEY") or os.getenv("GREENFIELD_PRIVATE_KEY")
+        txn_hash = cfg.get("GREENFIELD_TXN_HASH") or os.getenv("GREENFIELD_TXN_HASH")
+        content_type = cfg.get("GREENFIELD_CONTENT_TYPE") or os.getenv("GREENFIELD_CONTENT_TYPE", "application/octet-stream")
+        timeout = int(cfg.get("GREENFIELD_TIMEOUT") or os.getenv("GREENFIELD_TIMEOUT", "30"))
+
+        # Validate required parameters
+        if not sp_host:
+            raise ValueError("GREENFIELD_SP_HOST is required when using Greenfield backend")
+        if not bucket:
+            raise ValueError("GREENFIELD_BUCKET is required when using Greenfield backend")
+        if not private_key:
+            raise ValueError("GREENFIELD_PRIVATE_KEY is required when using Greenfield backend")
+        if not txn_hash:
+            raise ValueError(
+                "GREENFIELD_TXN_HASH is required when using Greenfield backend. "
+                "This should be the transaction hash from CreateObject operation."
+            )
+
+        storage = GreenfieldReputationStorage(
+            sp_host=sp_host,
+            bucket=bucket,
+            private_key=private_key,
+            txn_hash=txn_hash,
+            content_type=content_type,
+            timeout=timeout,
         )
+        logger.debug(f"Created Greenfield reputation storage: bucket={bucket}, sp_host={sp_host}")
+        return storage
 
     # Default to IPFS backend
     if backend != "ipfs":
         logger.warning(
             f"Unknown reputation backend '{backend}', falling back to IPFS. "
-            f"Valid options: 'ipfs' (currently), 'greenfield' (Phase 2+)"
+            f"Valid options: 'ipfs', 'greenfield'"
         )
 
     # Use provided IPFS client or create a new one

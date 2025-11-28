@@ -4,12 +4,13 @@ Unit tests for ReputationStorage interface and implementations.
 Tests cover:
 - ReputationStorage interface contract
 - IpfsReputationStorage adapter
-- Storage factory default behavior
+- GreenfieldReputationStorage implementation
+- Storage factory with backend switching
 """
 
 import json
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, MagicMock, patch, ANY
 
 from agent0_sdk.core.storage_interfaces import ReputationStorage
 from agent0_sdk.core.ipfs_storage import IpfsReputationStorage
@@ -128,6 +129,26 @@ class TestStorageFactory:
         # Verify: Returns IpfsReputationStorage instance
         assert isinstance(storage, IpfsReputationStorage)
         assert storage.client is mock_ipfs
+
+    @pytest.mark.parametrize("backend,expected_type", [
+        ("ipfs", "IpfsReputationStorage"),
+        ("IPFS", "IpfsReputationStorage"),  # Case insensitive
+    ])
+    def test_factory_backend_switching(self, backend, expected_type):
+        """Test that factory correctly switches between backends."""
+        # Setup: Create mock IPFS client
+        mock_ipfs = Mock(spec=IPFSClient)
+
+        # Execute: Create storage with specified backend
+        storage = create_reputation_storage(
+            config={"REPUTATION_BACKEND": backend},
+            ipfs_client=mock_ipfs
+        )
+
+        # Verify: Correct type returned
+        if expected_type == "IpfsReputationStorage":
+            assert isinstance(storage, IpfsReputationStorage)
+        # Note: Greenfield tests are in TestGreenfieldStorageFactory
 
     def test_factory_respects_backend_config(self):
         """Test that factory respects REPUTATION_BACKEND configuration."""
@@ -256,3 +277,248 @@ class TestReputationStorageInterface:
         assert hasattr(storage, 'get')
         assert callable(storage.put)
         assert callable(storage.get)
+
+
+class TestGreenfieldReputationStorage:
+    """Test Greenfield implementation of ReputationStorage interface."""
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_put_uploads_to_greenfield(self, mock_session_class):
+        """Test that put() uploads data to Greenfield with correct URL and headers."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"ETag": "test-etag", "X-Gnfd-Request-ID": "req-123"}
+        mock_session.put.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        # Import here to avoid dependency issues in other tests
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            txn_hash="0xabcdef123456",
+        )
+
+        # Execute: Upload data
+        test_data = b"test reputation data"
+        result_key = storage.put(key="test-key", data=test_data)
+
+        # Verify: Correct URL format (virtual-hosted-style)
+        assert result_key == "test-key"
+        mock_session.put.assert_called_once()
+        call_args = mock_session.put.call_args
+        url = call_args[0][0]
+        assert url == "https://test-bucket.gnfd-testnet-sp1.bnbchain.org/test-key"
+
+        # Verify: Required headers present
+        headers = call_args[1]['headers']
+        assert "Authorization" in headers
+        assert headers["X-Gnfd-Txn-Hash"] == "0xabcdef123456"
+        assert headers["Content-Type"] == "application/octet-stream"
+        assert headers["Content-Length"] == str(len(test_data))
+        assert headers["Authorization"].startswith("GNFD1-ECDSA, Signature=")
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_put_generates_key_when_empty(self, mock_session_class):
+        """Test that put() generates UUID key when key is empty."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"ETag": "test-etag"}
+        mock_session.put.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xabcdef",
+        )
+
+        # Execute: Upload without key
+        result_key = storage.put(key="", data=b"data")
+
+        # Verify: Generated key is non-empty and looks like UUID (32 hex chars)
+        assert result_key
+        assert len(result_key) == 32
+        assert all(c in "0123456789abcdef" for c in result_key)
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_get_retrieves_from_greenfield(self, mock_session_class):
+        """Test that get() retrieves data from Greenfield."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.content = b"retrieved data"
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xabcdef",
+        )
+
+        # Execute: Retrieve data
+        result_data = storage.get(key="test-key")
+
+        # Verify: Correct URL and returned data
+        mock_session.get.assert_called_once()
+        url = mock_session.get.call_args[0][0]
+        assert url == "https://test-bucket.gnfd-testnet-sp1.bnbchain.org/test-key"
+        assert result_data == b"retrieved data"
+
+    def test_greenfield_storage_validates_required_params(self):
+        """Test that GreenfieldReputationStorage validates required parameters."""
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        # Verify: Missing sp_host raises ValueError
+        with pytest.raises(ValueError, match="sp_host is required"):
+            GreenfieldReputationStorage(
+                sp_host="",
+                bucket="test",
+                private_key="0x" + "1" * 64,
+                txn_hash="0xabc",
+            )
+
+        # Verify: Missing bucket raises ValueError
+        with pytest.raises(ValueError, match="bucket is required"):
+            GreenfieldReputationStorage(
+                sp_host="test.bnbchain.org",
+                bucket="",
+                private_key="0x" + "1" * 64,
+                txn_hash="0xabc",
+            )
+
+        # Verify: Missing private_key raises ValueError
+        with pytest.raises(ValueError, match="private_key is required"):
+            GreenfieldReputationStorage(
+                sp_host="test.bnbchain.org",
+                bucket="test",
+                private_key="",
+                txn_hash="0xabc",
+            )
+
+        # Verify: Missing txn_hash raises ValueError
+        with pytest.raises(ValueError, match="txn_hash is required"):
+            GreenfieldReputationStorage(
+                sp_host="test.bnbchain.org",
+                bucket="test",
+                private_key="0x" + "1" * 64,
+                txn_hash="",
+            )
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_canonical_request_format(self, mock_session_class):
+        """Test that canonical request is built correctly for signing."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"ETag": "test"}
+        mock_session.put.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="my-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xabcdef123456",
+        )
+
+        # Execute: Upload to trigger canonical request building
+        storage.put(key="test-object", data=b"test data")
+
+        # Verify: Authorization header exists and has correct format
+        mock_session.put.assert_called_once()
+        headers = mock_session.put.call_args[1]['headers']
+        auth = headers["Authorization"]
+
+        # Check format: "GNFD1-ECDSA, Signature=<hex>"
+        assert auth.startswith("GNFD1-ECDSA, Signature=")
+        signature_part = auth.split("Signature=")[1]
+        # Ethereum signature should be 130 chars (65 bytes * 2)
+        assert len(signature_part) == 130
+        assert all(c in "0123456789abcdef" for c in signature_part)
+
+
+class TestGreenfieldStorageFactory:
+    """Test storage factory with Greenfield backend."""
+
+    @patch('agent0_sdk.core.storage_factory._import_greenfield_storage')
+    def test_factory_creates_greenfield_storage(self, mock_import):
+        """Test that factory creates Greenfield storage when backend is 'greenfield'."""
+        # Setup: Mock GreenfieldReputationStorage class
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+        mock_import.return_value = GreenfieldReputationStorage
+
+        # Execute: Create storage with Greenfield backend
+        config = {
+            "REPUTATION_BACKEND": "greenfield",
+            "GREENFIELD_SP_HOST": "gnfd-testnet-sp1.bnbchain.org",
+            "GREENFIELD_BUCKET": "test-bucket",
+            "GREENFIELD_PRIVATE_KEY": "0x" + "1" * 64,
+            "GREENFIELD_TXN_HASH": "0xabcdef123456",
+        }
+
+        with patch('agent0_sdk.core.greenfield_storage.requests.Session'):
+            storage = create_reputation_storage(config=config)
+
+            # Verify: Created GreenfieldReputationStorage instance
+            assert isinstance(storage, GreenfieldReputationStorage)
+            assert storage.bucket == "test-bucket"
+            assert storage.sp_host == "gnfd-testnet-sp1.bnbchain.org"
+
+    def test_factory_validates_greenfield_config(self):
+        """Test that factory validates required Greenfield configuration."""
+        # Verify: Missing sp_host raises ValueError
+        with pytest.raises(ValueError, match="GREENFIELD_SP_HOST is required"):
+            create_reputation_storage(config={"REPUTATION_BACKEND": "greenfield"})
+
+        # Verify: Missing bucket raises ValueError
+        config = {
+            "REPUTATION_BACKEND": "greenfield",
+            "GREENFIELD_SP_HOST": "test.bnbchain.org",
+        }
+        with pytest.raises(ValueError, match="GREENFIELD_BUCKET is required"):
+            create_reputation_storage(config=config)
+
+        # Verify: Missing private_key raises ValueError
+        config = {
+            "REPUTATION_BACKEND": "greenfield",
+            "GREENFIELD_SP_HOST": "test.bnbchain.org",
+            "GREENFIELD_BUCKET": "test-bucket",
+        }
+        with pytest.raises(ValueError, match="GREENFIELD_PRIVATE_KEY is required"):
+            create_reputation_storage(config=config)
+
+    @patch.dict('os.environ', {
+        'REPUTATION_BACKEND': 'greenfield',
+        'GREENFIELD_SP_HOST': 'gnfd-testnet-sp1.bnbchain.org',
+        'GREENFIELD_BUCKET': 'env-bucket',
+        'GREENFIELD_PRIVATE_KEY': '0x' + '2' * 64,
+        'GREENFIELD_TXN_HASH': '0xenv123',
+    })
+    @patch('agent0_sdk.core.storage_factory._import_greenfield_storage')
+    def test_factory_reads_greenfield_from_environment(self, mock_import):
+        """Test that factory reads Greenfield config from environment."""
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+        mock_import.return_value = GreenfieldReputationStorage
+
+        # Execute: Create storage without config (should read from env)
+        with patch('agent0_sdk.core.greenfield_storage.requests.Session'):
+            storage = create_reputation_storage()
+
+            # Verify: Created with env values
+            assert isinstance(storage, GreenfieldReputationStorage)
+            assert storage.bucket == "env-bucket"
+            assert storage.sp_host == "gnfd-testnet-sp1.bnbchain.org"
