@@ -24,8 +24,35 @@ Phase 3：后端切换与文档/配置验证 ✅
   - [x] 参数化 `REPUTATION_BACKEND` 为 ipfs/greenfield，验证工厂实例类型。
   - [x] 缺失必要 Greenfield 配置时抛出明确异常或日志警告。
 
-Phase 4（可选）：集成验证
-- [ ] 测试网创建 bucket/object，获取 Txn Hash，跑一次 Put/Get 验证；上线前在主网重复。
-- [ ] 若要对外公开读，验证无需 Authorization 也能 GET；否则验证签名 URL/鉴权策略。
-- [ ] 单元/集成测试：
-  - [ ] 使用测试网 SP 的 mock 或沙盒 endpoint，跑实际 PUT/GET（可标记为 integration）。
+Phase 4：集成验证 ✅
+- [x] 创建集成测试文件 `tests/test_greenfield_integration.py`，包含：
+  - [x] 真实 Greenfield 测试网连接测试（PUT/GET roundtrip）
+  - [x] 自动生成 key 测试
+  - [x] Per-object txn_hash 测试
+  - [x] 大文件上传测试（1MB）
+  - [x] 二进制数据完整性测试
+  - [x] 错误处理测试（不存在的对象）
+- [x] 公开读功能验证：
+  - [x] 测试无需 Authorization 的公开读访问
+  - [x] 验证公开 URL 格式
+- [x] 工厂集成测试：
+  - [x] 从环境变量创建 Greenfield 存储
+  - [x] 后端切换测试
+- [x] 创建完整的设置指南 `docs/greenfield_integration_guide.md`，包含：
+  - [x] 前置条件（依赖、测试网 BNB、私钥获取）
+  - [x] 测试网配置信息
+  - [x] Bucket 创建步骤（DCellar 和 CLI 两种方式）
+  - [x] Transaction Hash 获取方法
+  - [x] 环境变量配置
+  - [x] 运行测试命令
+  - [x] 公开读设置
+  - [x] 故障排查指南
+  - [x] 主网迁移清单
+- [x] 创建使用示例文档 `docs/greenfield_usage_examples.md`，包含：
+  - [x] 基础用法（工厂模式和直接使用）
+  - [x] 配置方法（环境变量和代码配置）
+  - [x] 存储操作示例（上传、下载、批量操作）
+  - [x] 错误处理（重试、降级）
+  - [x] 高级用法（版本控制、元数据、内容寻址）
+  - [x] 生产考虑（监控、缓存、健康检查）
+  - [x] 完整的生产级服务示例
