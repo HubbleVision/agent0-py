@@ -242,7 +242,8 @@ class GreenfieldReputationStorage(ReputationStorage):
 
         # Format signature as lowercase hex (without 0x prefix for the signature value)
         # Combine r, s, v into standard Ethereum signature format
-        signature_hex = signature.signature.hex()
+        # Strip 0x prefix - eth_account's hex() includes it but Greenfield expects raw hex
+        signature_hex = signature.signature.hex()[2:] if signature.signature.hex().startswith('0x') else signature.signature.hex()
 
         # Build authorization header
         auth_header = f"GNFD1-ECDSA, Signature={signature_hex}"
