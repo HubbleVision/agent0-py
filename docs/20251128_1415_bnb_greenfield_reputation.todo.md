@@ -1,4 +1,4 @@
-BNB Greenfield 声誉存储改造 TODO
+waBNB Greenfield 声誉存储改造 TODO
 
 Phase 1：接口抽象与 IPFS 适配（最小改动）✅
 - [x] 引入 `ReputationStorage` 抽象类（put/get）。

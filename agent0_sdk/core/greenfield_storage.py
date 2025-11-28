@@ -115,7 +115,8 @@ class GreenfieldReputationStorage(ReputationStorage):
         object_key = key.strip() if key else self._gen_key()
 
         # Build URL (using virtual-hosted-style)
-        url = f"https://{self.bucket}.{self.sp_host}/{quote(object_key, safe='')}"
+        # Preserve slashes in path to match canonical request signing (safe='/')
+        url = f"https://{self.bucket}.{self.sp_host}/{quote(object_key, safe='/')}"
 
         # Prepare expiry timestamp (24 hours from now)
         expiry = datetime.now(timezone.utc) + timedelta(hours=24)
@@ -173,7 +174,8 @@ class GreenfieldReputationStorage(ReputationStorage):
             RuntimeError: If retrieval fails
         """
         # Build URL (using virtual-hosted-style)
-        url = f"https://{self.bucket}.{self.sp_host}/{quote(key, safe='')}"
+        # Preserve slashes in path to match canonical request signing (safe='/')
+        url = f"https://{self.bucket}.{self.sp_host}/{quote(key, safe='/')}"
 
         logger.debug(f"GET {url} (key={key})")
 
