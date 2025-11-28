@@ -143,9 +143,17 @@ def build_ipfs_client(config: Optional[Dict[str, Any]] = None) -> IPFSClient:
     cfg = config or {}
 
     ipfs_url = cfg.get("IPFS_API_URL") or os.getenv("IPFS_API_URL")
-    filecoin_pin_enabled = cfg.get("FILECOIN_PIN_ENABLED") or os.getenv("FILECOIN_PIN_ENABLED", "false").lower() == "true"
+
+    # Boolean flags: get value first, then normalize to bool
+    # This ensures string "false" from config is correctly interpreted
+    filecoin_pin_val = cfg.get("FILECOIN_PIN_ENABLED") or os.getenv("FILECOIN_PIN_ENABLED", "false")
+    filecoin_pin_enabled = str(filecoin_pin_val).lower() == "true"
+
     filecoin_private_key = cfg.get("FILECOIN_PRIVATE_KEY") or os.getenv("FILECOIN_PRIVATE_KEY")
-    pinata_enabled = cfg.get("PINATA_ENABLED") or os.getenv("PINATA_ENABLED", "false").lower() == "true"
+
+    pinata_val = cfg.get("PINATA_ENABLED") or os.getenv("PINATA_ENABLED", "false")
+    pinata_enabled = str(pinata_val).lower() == "true"
+
     pinata_jwt = cfg.get("PINATA_JWT") or os.getenv("PINATA_JWT")
 
     return IPFSClient(
