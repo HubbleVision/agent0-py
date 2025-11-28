@@ -62,12 +62,12 @@ GREENFIELD_PRIVATE_KEY=0x1234... # Your wallet private key
 GREENFIELD_TXN_HASH=0xabcdef... # From CreateObject operation
 ```
 
-### 4. Create Bucket and Object (One-time Setup)
+### 4. Create Bucket and Object
 
 Before using Greenfield storage, you need to:
 
 1. **Create a Bucket** on Greenfield (using greenfield-cmd or SDK)
-2. **Create an Object** to get the transaction hash
+2. **Create Objects** and obtain transaction hashes for each object
 
 Example using greenfield-cmd:
 
@@ -76,14 +76,24 @@ Example using greenfield-cmd:
 gnfd-cmd bucket create gnfd://my-reputation-bucket
 
 # Create object (will get txn hash in response)
-gnfd-cmd object create gnfd://my-reputation-bucket/placeholder.txt
+gnfd-cmd object create gnfd://my-reputation-bucket/object-name
 ```
 
-Copy the transaction hash from the CreateObject response and set it as `GREENFIELD_TXN_HASH`.
+**Two Usage Patterns:**
+
+**Pattern A: Single Default Transaction Hash** (for simple use cases)
+- Create one object and use its txn hash as default
+- Set `GREENFIELD_TXN_HASH` environment variable
+- All uploads use the same txn hash
+
+**Pattern B: Per-Object Transaction Hash** (recommended for production)
+- Create objects individually via Greenfield SDK
+- Obtain each object's txn hash from CreateObject operation
+- Provide txn_hash parameter in each `put()` call
 
 ### 5. Use in Code
 
-No code changes needed! The SDK automatically uses the configured backend:
+**Basic Usage (with default txn_hash):**
 
 ```python
 from agent0_sdk.core.storage_factory import create_reputation_storage
@@ -91,11 +101,34 @@ from agent0_sdk.core.storage_factory import create_reputation_storage
 # Creates Greenfield storage based on environment config
 storage = create_reputation_storage()
 
-# Store data (same interface as IPFS)
+# Store data (uses default txn_hash from config)
 key = storage.put(key="", data=b"reputation data")
 
 # Retrieve data
 data = storage.get(key=key)
+```
+
+**Advanced Usage (per-object txn_hash):**
+
+```python
+from agent0_sdk.core.storage_factory import create_reputation_storage
+
+# Create storage without default txn_hash
+config = {
+    "REPUTATION_BACKEND": "greenfield",
+    "GREENFIELD_SP_HOST": "gnfd-testnet-sp1.bnbchain.org",
+    "GREENFIELD_BUCKET": "my-bucket",
+    "GREENFIELD_PRIVATE_KEY": "0x...",
+    # No GREENFIELD_TXN_HASH - will provide per object
+}
+storage = create_reputation_storage(config=config)
+
+# Store multiple objects, each with its own txn_hash
+key1 = storage.put(key="obj1", data=b"data1", txn_hash="0xhash_for_obj1")
+key2 = storage.put(key="obj2", data=b"data2", txn_hash="0xhash_for_obj2")
+
+# Or use auto-generated keys
+key3 = storage.put(key="", data=b"data3", txn_hash="0xhash_for_obj3")
 ```
 
 ## Configuration Reference
@@ -108,14 +141,14 @@ data = storage.get(key=key)
 | `GREENFIELD_SP_HOST` | Storage Provider endpoint | `gnfd-testnet-sp1.bnbchain.org` |
 | `GREENFIELD_BUCKET` | Bucket name | `my-reputation-bucket` |
 | `GREENFIELD_PRIVATE_KEY` | Wallet private key (hex) | `0x1234...` |
-| `GREENFIELD_TXN_HASH` | CreateObject transaction hash | `0xabcdef...` |
 
 ### Optional Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GREENFIELD_CONTENT_TYPE` | Content-Type for objects | `application/octet-stream` |
-| `GREENFIELD_TIMEOUT` | Request timeout (seconds) | `30` |
+| Variable | Description | Default | Notes |
+|----------|-------------|---------|-------|
+| `GREENFIELD_TXN_HASH` | Default CreateObject transaction hash | None | Can be provided per-object in `put()` calls |
+| `GREENFIELD_CONTENT_TYPE` | Content-Type for objects | `application/octet-stream` | - |
+| `GREENFIELD_TIMEOUT` | Request timeout (seconds) | `30` | - |
 
 ## Network Information
 
@@ -192,9 +225,16 @@ except RuntimeError as e:
 
 ## Troubleshooting
 
-### "GREENFIELD_TXN_HASH is required"
+### "txn_hash is required for Greenfield PutObject operation"
 
-You need to create an object on-chain first using greenfield-cmd or SDK, then use the transaction hash from that operation.
+**Cause**: No transaction hash available (neither in constructor nor put() parameter).
+
+**Solution**: Provide txn_hash either:
+1. As constructor parameter: `GreenfieldReputationStorage(..., txn_hash="0x...")`
+2. As put() parameter: `storage.put(key="...", data=..., txn_hash="0x...")`
+3. Via environment variable: `GREENFIELD_TXN_HASH=0x...`
+
+**Note**: For multiple objects, use per-object txn_hash in put() calls.
 
 ### "Failed to upload to Greenfield"
 

@@ -49,9 +49,47 @@ class TestIpfsReputationStorage:
         test_data = bytes([0xFF, 0xFE, 0xFD])
         result_cid = storage.put(key="ignored_key", data=test_data)
 
-        # Verify: IPFS client was called (data converted to base64)
+        # Verify: IPFS client was called (data converted to base64 with prefix)
         assert mock_ipfs.add.called
+        call_arg = mock_ipfs.add.call_args[0][0]
+        assert call_arg.startswith("__B64__:")
         assert result_cid == "QmBase64CID"
+
+    def test_put_get_roundtrip_non_utf8(self):
+        """Test that non-UTF-8 data survives put/get roundtrip."""
+        # Setup: Create mock IPFS client
+        mock_ipfs = Mock(spec=IPFSClient)
+        import base64
+        test_data = bytes([0xFF, 0xFE, 0xFD])
+        stored_str = "__B64__:" + base64.b64encode(test_data).decode('utf-8')
+        mock_ipfs.add.return_value = "QmTestCID"
+        mock_ipfs.get.return_value = stored_str
+
+        storage = IpfsReputationStorage(client=mock_ipfs)
+
+        # Execute: Store and retrieve
+        cid = storage.put(key="", data=test_data)
+        retrieved_data = storage.get(key=cid)
+
+        # Verify: Retrieved data matches original
+        assert retrieved_data == test_data
+
+    def test_put_get_roundtrip_utf8(self):
+        """Test that UTF-8 data survives put/get roundtrip."""
+        # Setup: Create mock IPFS client
+        mock_ipfs = Mock(spec=IPFSClient)
+        test_data = b"test reputation data"
+        mock_ipfs.add.return_value = "QmTestCID"
+        mock_ipfs.get.return_value = test_data.decode('utf-8')
+
+        storage = IpfsReputationStorage(client=mock_ipfs)
+
+        # Execute: Store and retrieve
+        cid = storage.put(key="", data=test_data)
+        retrieved_data = storage.get(key=cid)
+
+        # Verify: Retrieved data matches original
+        assert retrieved_data == test_data
 
     def test_get_retrieves_data_by_cid(self):
         """Test that get() retrieves data from IPFS by CID."""
@@ -378,7 +416,6 @@ class TestGreenfieldReputationStorage:
                 sp_host="",
                 bucket="test",
                 private_key="0x" + "1" * 64,
-                txn_hash="0xabc",
             )
 
         # Verify: Missing bucket raises ValueError
@@ -387,7 +424,6 @@ class TestGreenfieldReputationStorage:
                 sp_host="test.bnbchain.org",
                 bucket="",
                 private_key="0x" + "1" * 64,
-                txn_hash="0xabc",
             )
 
         # Verify: Missing private_key raises ValueError
@@ -396,17 +432,107 @@ class TestGreenfieldReputationStorage:
                 sp_host="test.bnbchain.org",
                 bucket="test",
                 private_key="",
-                txn_hash="0xabc",
             )
 
-        # Verify: Missing txn_hash raises ValueError
+        # Note: txn_hash is now optional in constructor (can be provided per-object)
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_put_requires_txn_hash(self, mock_session_class):
+        """Test that put() raises error when no txn_hash is available."""
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        # Setup: Create storage without default txn_hash
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash=None,  # No default
+        )
+
+        # Verify: put() without txn_hash parameter raises ValueError
         with pytest.raises(ValueError, match="txn_hash is required"):
-            GreenfieldReputationStorage(
-                sp_host="test.bnbchain.org",
-                bucket="test",
-                private_key="0x" + "1" * 64,
-                txn_hash="",
-            )
+            storage.put(key="test-key", data=b"test data")
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_put_with_per_object_txn_hash(self, mock_session_class):
+        """Test that put() can use per-object txn_hash parameter."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"ETag": "test-etag"}
+        mock_session.put.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        # Create storage without default txn_hash
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash=None,
+        )
+
+        # Execute: Upload with per-object txn_hash
+        storage.put(key="obj1", data=b"data1", txn_hash="0xper_object_hash1")
+
+        # Verify: Used the per-object txn_hash
+        headers = mock_session.put.call_args[1]['headers']
+        assert headers["X-Gnfd-Txn-Hash"] == "0xper_object_hash1"
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_put_overrides_default_txn_hash(self, mock_session_class):
+        """Test that per-object txn_hash overrides default."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"ETag": "test-etag"}
+        mock_session.put.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        # Create storage with default txn_hash
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xdefault_hash",
+        )
+
+        # Execute: Upload with per-object txn_hash (should override default)
+        storage.put(key="obj1", data=b"data1", txn_hash="0xoverride_hash")
+
+        # Verify: Used the override txn_hash, not default
+        headers = mock_session.put.call_args[1]['headers']
+        assert headers["X-Gnfd-Txn-Hash"] == "0xoverride_hash"
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_put_uses_default_txn_hash_when_not_provided(self, mock_session_class):
+        """Test that put() uses default txn_hash when parameter not provided."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"ETag": "test-etag"}
+        mock_session.put.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        # Create storage with default txn_hash
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xdefault_hash",
+        )
+
+        # Execute: Upload without per-object txn_hash
+        storage.put(key="obj1", data=b"data1")
+
+        # Verify: Used the default txn_hash
+        headers = mock_session.put.call_args[1]['headers']
+        assert headers["X-Gnfd-Txn-Hash"] == "0xdefault_hash"
 
     @patch('agent0_sdk.core.greenfield_storage.requests.Session')
     def test_canonical_request_format(self, mock_session_class):
@@ -492,6 +618,8 @@ class TestGreenfieldStorageFactory:
         }
         with pytest.raises(ValueError, match="GREENFIELD_PRIVATE_KEY is required"):
             create_reputation_storage(config=config)
+
+        # Note: txn_hash is now optional (logs warning but doesn't raise error)
 
     @patch.dict('os.environ', {
         'REPUTATION_BACKEND': 'greenfield',

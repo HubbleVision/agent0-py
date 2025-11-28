@@ -82,9 +82,12 @@ def create_reputation_storage(
             raise ValueError("GREENFIELD_BUCKET is required when using Greenfield backend")
         if not private_key:
             raise ValueError("GREENFIELD_PRIVATE_KEY is required when using Greenfield backend")
+
+        # txn_hash is optional (can be provided per-object in put() calls)
         if not txn_hash:
-            raise ValueError(
-                "GREENFIELD_TXN_HASH is required when using Greenfield backend. "
+            logger.warning(
+                "GREENFIELD_TXN_HASH not provided as default. "
+                "You must provide txn_hash for each put() call. "
                 "This should be the transaction hash from CreateObject operation."
             )
 

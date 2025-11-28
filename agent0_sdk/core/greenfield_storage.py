@@ -37,7 +37,7 @@ class GreenfieldReputationStorage(ReputationStorage):
         sp_host: str,
         bucket: str,
         private_key: str,
-        txn_hash: str,
+        txn_hash: Optional[str] = None,
         content_type: str = "application/octet-stream",
         timeout: int = 30,
     ):
@@ -47,7 +47,9 @@ class GreenfieldReputationStorage(ReputationStorage):
             sp_host: Storage Provider host (e.g., gnfd-testnet-sp1.bnbchain.org)
             bucket: Bucket name for storing objects
             private_key: Private key for signing requests (hex string with or without 0x prefix)
-            txn_hash: Transaction hash from CreateObject operation (required for PutObject)
+            txn_hash: Optional default transaction hash from CreateObject operation.
+                     Can be overridden per-object in put() method.
+                     Required for PutObject unless provided in each put() call.
             content_type: Default Content-Type for objects (default: application/octet-stream)
             timeout: Request timeout in seconds (default: 30)
 
@@ -60,12 +62,10 @@ class GreenfieldReputationStorage(ReputationStorage):
             raise ValueError("bucket is required")
         if not private_key:
             raise ValueError("private_key is required")
-        if not txn_hash:
-            raise ValueError("txn_hash is required for PutObject operations")
 
         self.sp_host = sp_host.strip()
         self.bucket = bucket.strip()
-        self.txn_hash = txn_hash.strip()
+        self.default_txn_hash = txn_hash.strip() if txn_hash else None
         self.content_type = content_type
         self.timeout = timeout
 
@@ -75,24 +75,42 @@ class GreenfieldReputationStorage(ReputationStorage):
         self.account = Account.from_key(private_key)
         self.session = requests.Session()
 
+        if not self.default_txn_hash:
+            logger.warning(
+                "No default txn_hash provided. You must provide txn_hash in each put() call."
+            )
+
         logger.info(
             f"Initialized Greenfield storage: bucket={bucket}, sp_host={sp_host}, "
-            f"wallet={self.account.address}"
+            f"wallet={self.account.address}, has_default_txn_hash={bool(self.default_txn_hash)}"
         )
 
-    def put(self, key: str, data: bytes) -> str:
+    def put(self, key: str, data: bytes, txn_hash: Optional[str] = None) -> str:
         """Store data on Greenfield and return object key.
 
         Args:
             key: Object key/name (if empty, auto-generates UUID-based key)
             data: Binary data to store
+            txn_hash: Optional transaction hash from CreateObject operation for this specific object.
+                     If not provided, uses the default from constructor.
+                     At least one (parameter or default) must be available.
 
         Returns:
             Object key (name) that can be used to retrieve the data
 
         Raises:
+            ValueError: If no txn_hash is available (neither provided nor default)
             RuntimeError: If upload fails
         """
+        # Determine which txn_hash to use (prioritize parameter over default)
+        effective_txn_hash = txn_hash if txn_hash else self.default_txn_hash
+
+        if not effective_txn_hash:
+            raise ValueError(
+                "txn_hash is required for Greenfield PutObject operation. "
+                "Provide it either in constructor or in put() call."
+            )
+
         # Generate key if not provided
         object_key = key.strip() if key else self._gen_key()
 
@@ -103,7 +121,7 @@ class GreenfieldReputationStorage(ReputationStorage):
         headers = {
             "Content-Type": self.content_type,
             "Content-Length": str(len(data)),
-            "X-Gnfd-Txn-Hash": self.txn_hash,
+            "X-Gnfd-Txn-Hash": effective_txn_hash,
         }
 
         # Build authorization

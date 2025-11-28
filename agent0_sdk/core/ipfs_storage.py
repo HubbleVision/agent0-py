@@ -31,12 +31,13 @@ class IpfsReputationStorage(ReputationStorage):
         """
         self.client = client
 
-    def put(self, key: str, data: bytes) -> str:
+    def put(self, key: str, data: bytes, txn_hash: Optional[str] = None) -> str:
         """Store data on IPFS and return CID.
 
         Args:
             key: Optional key (not used for IPFS, which generates CID automatically)
             data: Binary data to store
+            txn_hash: Optional transaction hash (not used for IPFS, for interface compatibility)
 
         Returns:
             IPFS CID (Content Identifier)
@@ -46,10 +47,10 @@ class IpfsReputationStorage(ReputationStorage):
         try:
             data_str = data.decode('utf-8')
         except UnicodeDecodeError:
-            # If data is not valid UTF-8, store as base64
+            # If data is not valid UTF-8, store as base64 with magic prefix
             import base64
-            data_str = base64.b64encode(data).decode('utf-8')
-            logger.warning("Data is not valid UTF-8, storing as base64")
+            data_str = "__B64__:" + base64.b64encode(data).decode('utf-8')
+            logger.warning("Data is not valid UTF-8, storing as base64 with magic prefix")
 
         cid = self.client.add(data_str)
         logger.debug(f"Stored data on IPFS with CID: {cid}")
@@ -69,8 +70,16 @@ class IpfsReputationStorage(ReputationStorage):
         """
         try:
             data_str = self.client.get(key)
-            # Try to decode as UTF-8 first
-            return data_str.encode('utf-8')
+
+            # Check if data was stored as base64 (with magic prefix)
+            if data_str.startswith("__B64__:"):
+                import base64
+                # Decode base64 to get original binary data
+                b64_data = data_str[8:]  # Remove "__B64__:" prefix
+                return base64.b64decode(b64_data)
+            else:
+                # Normal UTF-8 string, encode back to bytes
+                return data_str.encode('utf-8')
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve data from IPFS (CID: {key}): {e}") from e
 

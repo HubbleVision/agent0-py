@@ -18,12 +18,15 @@ class ReputationStorage(ABC):
     """
 
     @abstractmethod
-    def put(self, key: str, data: bytes) -> str:
+    def put(self, key: str, data: bytes, txn_hash: Optional[str] = None) -> str:
         """Store data and return a unique identifier.
 
         Args:
             key: Unique key for the data (can be empty string for auto-generation)
             data: Binary data to store
+            txn_hash: Optional transaction hash for Greenfield CreateObject operation.
+                     Required for Greenfield, ignored for IPFS.
+                     If not provided, uses the default from constructor (if available).
 
         Returns:
             Unique identifier (CID for IPFS, object key for Greenfield)
