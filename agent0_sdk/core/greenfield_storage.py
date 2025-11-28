@@ -117,14 +117,19 @@ class GreenfieldReputationStorage(ReputationStorage):
         # Build URL (using virtual-hosted-style)
         url = f"https://{self.bucket}.{self.sp_host}/{quote(object_key, safe='')}"
 
-        # Prepare headers
+        # Prepare expiry timestamp (24 hours from now)
+        expiry = datetime.now(timezone.utc) + timedelta(hours=24)
+        expiry_str = expiry.isoformat().replace("+00:00", "Z")
+
+        # Prepare headers (must include all x-gnfd-* headers BEFORE signing)
         headers = {
             "Content-Type": self.content_type,
             "Content-Length": str(len(data)),
             "X-Gnfd-Txn-Hash": effective_txn_hash,
+            "X-Gnfd-Expiry-Timestamp": expiry_str,
         }
 
-        # Build authorization
+        # Build authorization (signs all headers including x-gnfd-* headers)
         auth_header = self._build_authorization(
             method="PUT",
             path=f"/{object_key}",
@@ -132,10 +137,6 @@ class GreenfieldReputationStorage(ReputationStorage):
             body=data,
         )
         headers["Authorization"] = auth_header
-
-        # Add expiry timestamp (24 hours from now)
-        expiry = datetime.now(timezone.utc) + timedelta(hours=24)
-        headers["X-Gnfd-Expiry-Timestamp"] = expiry.isoformat().replace("+00:00", "Z")
 
         logger.debug(f"PUT {url} (key={object_key}, size={len(data)} bytes)")
 

@@ -6,7 +6,7 @@ allowing multiple implementations (IPFS, Greenfield, etc.) to be swapped transpa
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 class ReputationStorage(ABC):
