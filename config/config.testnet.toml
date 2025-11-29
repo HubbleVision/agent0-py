@@ -1,0 +1,2 @@
+rpcAddr = "https://gnfd-testnet-fullnode-tendermint-us.bnbchain.org:443"
+chainId = "greenfield_5600-1"

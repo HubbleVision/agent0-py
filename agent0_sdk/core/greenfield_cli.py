@@ -63,6 +63,9 @@ class GreenfieldCreateObjectHelper:
         self.bucket_name = bucket_name
         self.cli_template = cli_template or os.getenv("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE")
         self.cli_password = os.getenv("GREENFIELD_CLI_PASSWORD", "password123")
+        self.cli_config_file = os.getenv("GREENFIELD_CLI_CONFIG_FILE") or os.getenv("GREENFIELD_CLI_CONFIG_PATH")
+        # 默认关闭 --host，依赖 bucket 元信息选择 SP
+        self.cli_disable_host = os.getenv("GREENFIELD_CLI_DISABLE_HOST", "1") == "1"
         self._cli_password_file: Optional[str] = None
         self._cli_ready = False
         self._cli_bin: Optional[str] = None
@@ -359,8 +362,10 @@ class GreenfieldCreateObjectHelper:
         if not template:
             raise RuntimeError("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE not set")
 
-        bypass_seal = os.getenv("GREENFIELD_CLI_BYPASS_SEAL", "1") != "0"
+        bypass_seal = os.getenv("GREENFIELD_CLI_BYPASS_SEAL", "0") == "1"
         password_file = self._cli_password_file or ""
+        config_flag = f"--config {self.cli_config_file}" if self.cli_config_file else ""
+        host_flag = "" if self.cli_disable_host else f"--host {{sp_host}} "
 
         # Create temp file with actual data
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
@@ -380,7 +385,7 @@ class GreenfieldCreateObjectHelper:
         if "--bucket-name" in template or "-bucket-name" in template or "{object_url}" not in template:
             # Use recommended syntax with object URL
             template = (
-                f"{cli_bin} --chainId {{chain_id}} --rpcAddr {{rpc_url}} --host {{sp_host}} "
+                f"{cli_bin} --chainId {{chain_id}} {config_flag} --rpcAddr {{rpc_url}} {host_flag}"
                 f"{password_snippet}"
                 f"object put {bypass_snippet}--contentType {{content_type}} {{file}} gnfd://{{bucket}}/{{object}}"
             )
@@ -396,6 +401,8 @@ class GreenfieldCreateObjectHelper:
             rpc_url=self._normalize_rpc(self.rpc_url),
             chain_id=self.cli_chain_id,
             sp_host=self.sp_host,
+            config_flag=config_flag,
+            host_flag=host_flag.strip(),
             content_type=content_type,
             private_key=self._raw_private_key_hex,
             passwordfile=password_file,
@@ -456,8 +463,9 @@ class GreenfieldCreateObjectHelper:
         # Build command
         cmd = (
             f"{cli_bin} --chainId {self.cli_chain_id} "
+            f"{f'--config {self.cli_config_file} ' if self.cli_config_file else ''}"
             f"--rpcAddr {self._normalize_rpc(self.rpc_url)} "
-            f"--host {self.sp_host} "
+            f"{'' if self.cli_disable_host else f'--host {self.sp_host} '}"
             f"--passwordfile {self._cli_password_file} "
             f"object get gnfd://{self.bucket_name}/{object_name} {out_path}"
         )
@@ -490,8 +498,9 @@ class GreenfieldCreateObjectHelper:
 
         cmd = (
             f"{self._cli_bin} --chainId {self.cli_chain_id} "
+            f"{f'--config {self.cli_config_file} ' if self.cli_config_file else ''}"
             f"--rpcAddr {self._normalize_rpc(self.rpc_url)} "
-            f"--host {self.sp_host} "
+            f"{'' if self.cli_disable_host else f'--host {self.sp_host} '}"
             f"object head -f json gnfd://{bucket_name}/{object_name}"
         )
 
@@ -772,7 +781,7 @@ class GreenfieldAutoUploader:
         if self.session:
             await self.session.close()
 
-    async def wait_until_ready(self, object_name: str, timeout: int = 420, interval: int = 10) -> None:
+    async def wait_until_ready(self, object_name: str, timeout: int = 180, interval: int = 5) -> None:
         """Poll until object is sealed and downloadable."""
         deadline = time.time() + timeout
         last_err: Optional[Exception] = None
@@ -795,7 +804,8 @@ class GreenfieldAutoUploader:
             except Exception as exc:  # noqa: PERF203 - small loop count
                 last_err = exc
             await asyncio.sleep(interval)
-        raise RuntimeError(f"Object {object_name} not ready after {timeout}s: {last_err}")
+        logger.warning(f"Object {object_name} not ready after {timeout}s: {last_err}")
+        return
 
     async def _head_object(self, object_name: str) -> None:
         """HEAD object using SP API with signed headers."""

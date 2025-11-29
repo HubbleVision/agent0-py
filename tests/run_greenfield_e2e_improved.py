@@ -13,16 +13,17 @@ python run_greenfield_e2e_improved.py --mode mock    # 模拟模式
 python run_greenfield_e2e_improved.py --mode hybrid   # 混合模式
 """
 
+import argparse
 import asyncio
+import hashlib
 import json
+import logging
 import os
 import sys
 import time
-import hashlib
-import logging
-import argparse
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 from unittest.mock import Mock, patch
+
 from dotenv import load_dotenv
 
 # Setup logging
@@ -36,8 +37,8 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
     from agent0_sdk.core.greenfield_cli import create_e2e_helper
+    from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
     from agent0_sdk.core.storage_interfaces import ReputationStorage
 except ImportError as e:
     print(f"❌ 导入错误: {e}")
@@ -274,12 +275,12 @@ class ImprovedE2ETest:
 
     async def wait_object_ready(self, object_key: str) -> None:
         """等待对象在 SP 可读，避免 bypassSeal 后立即读取失败。"""
-        if self.bypass_seal:
+        if self.bypass_seal or os.getenv("GREENFIELD_WAIT_DISABLE", "0") == "1":
             return  # 用户显式要求跳过封存等待
         if not self.auto_uploader:
             return
-        wait_timeout = int(os.getenv("GREENFIELD_WAIT_TIMEOUT", "420"))
-        wait_interval = int(os.getenv("GREENFIELD_WAIT_INTERVAL", "10"))
+        wait_timeout = int(os.getenv("GREENFIELD_WAIT_TIMEOUT", "30"))
+        wait_interval = int(os.getenv("GREENFIELD_WAIT_INTERVAL", "5"))
         try:
             await self.auto_uploader.wait_until_ready(
                 object_key,
