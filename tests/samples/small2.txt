@@ -1,0 +1,1 @@
+This is a small text file upload to BNB greenfield storage provider

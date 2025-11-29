@@ -4,9 +4,15 @@ BNB Greenfield implementation of ReputationStorage interface.
 This module provides a Greenfield-based storage backend for reputation data,
 using the Greenfield Storage Provider HTTP API for PutObject/GetObject operations.
 
+For automatic CreateObject functionality, see greenfield_cli.py module:
+- GreenfieldCreateObjectHelper: Automatically creates objects on-chain
+- GreenfieldAutoUploader: Combines CreateObject + PutObject
+
 Reference:
 - SP API docs: https://github.com/bnb-chain/greenfield-storage-provider/blob/master/docs/storage-provider-rest-api/
 - Authorization: https://github.com/bnb-chain/greenfield-storage-provider/blob/master/docs/storage-provider-rest-api/README.md#authorization-header
+- E2E Testing: tests/test_greenfield_e2e.py (demonstrates full workflow)
+- E2E Guide: docs/GREENFIELD_E2E_GUIDE.md
 """
 
 import hashlib
@@ -73,6 +79,9 @@ class GreenfieldReputationStorage(ReputationStorage):
         if not private_key.startswith("0x"):
             private_key = "0x" + private_key
         self.account = Account.from_key(private_key)
+        # eth_keys PrivateKey for raw secp256k1 signing (SP expects raw hash signature)
+        from eth_keys import keys
+        self._eth_keys_priv = keys.PrivateKey(bytes.fromhex(private_key[2:]))
         self.session = requests.Session()
 
         if not self.default_txn_hash:
@@ -180,9 +189,22 @@ class GreenfieldReputationStorage(ReputationStorage):
         logger.debug(f"GET {url} (key={key})")
 
         try:
-            # For public buckets, GET doesn't require Authorization
-            # For private buckets, you'd need to add Authorization header here
-            resp = self.session.get(url, timeout=self.timeout)
+            headers = {}
+            # For private buckets, add Authorization (include expiry header)
+            expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+            expiry_str = expiry.isoformat().replace("+00:00", "Z")
+            headers["X-Gnfd-Expiry-Timestamp"] = expiry_str
+            headers["X-Gnfd-User-Address"] = self.account.address
+
+            auth_header = self._build_authorization(
+                method="GET",
+                path=f"/{key}",
+                headers=headers,
+                body=None,
+            )
+            headers["Authorization"] = auth_header
+
+            resp = self.session.get(url, headers=headers, timeout=self.timeout)
             resp.raise_for_status()
 
             logger.info(f"Successfully retrieved from Greenfield: key={key}, size={len(resp.content)} bytes")
@@ -238,14 +260,13 @@ class GreenfieldReputationStorage(ReputationStorage):
         # Hash canonical request using Keccak256
         canonical_hash = self._keccak256(canonical_request.encode("utf-8"))
 
-        # Sign the hash using secp256k1 (via eth_account)
-        # eth_account expects the hash as bytes
-        signature = self.account.signHash(canonical_hash)
+        # Sign raw hash (SP expects pure secp256k1 signature, not EIP-191 prefixed)
+        signature_obj = self._eth_keys_priv.sign_msg_hash(canonical_hash)
 
         # Format signature as lowercase hex (without 0x prefix for the signature value)
-        # Combine r, s, v into standard Ethereum signature format
-        # Strip 0x prefix - eth_account's hex() includes it but Greenfield expects raw hex
-        signature_hex = signature.signature.hex()[2:] if signature.signature.hex().startswith('0x') else signature.signature.hex()
+        signature_hex = signature_obj.to_hex()
+        if signature_hex.startswith("0x"):
+            signature_hex = signature_hex[2:]
 
         # Build authorization header
         auth_header = f"GNFD1-ECDSA, Signature={signature_hex}"

@@ -568,6 +568,49 @@ class TestGreenfieldReputationStorage:
         assert len(signature_part) == 130
         assert all(c in "0123456789abcdef" for c in signature_part)
 
+    def test_build_authorization_uses_raw_secp256k1(self):
+        """Authorization should sign raw keccak hash via eth_keys (no EIP-191 prefix)."""
+        from eth_utils import keccak
+        from eth_keys import keys
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        priv_hex = "0x" + "1" * 64
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="my-bucket",
+            private_key=priv_hex,
+            txn_hash="0xabcdef123456",
+        )
+
+        headers = {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": "3",
+            "X-Gnfd-Txn-Hash": "0xabcdef123456",
+            "X-Gnfd-Expiry-Timestamp": "2025-01-01T00:00:00Z",
+        }
+
+        canonical_request = storage._build_canonical_request(
+            method="PUT",
+            path="/obj",
+            query_string="",
+            headers=headers,
+            body=b"abc",
+        )
+
+        expected_hash = keccak(canonical_request.encode("utf-8"))
+        expected_sig = keys.PrivateKey(bytes.fromhex(priv_hex[2:])).sign_msg_hash(expected_hash).to_hex()
+        if expected_sig.startswith("0x"):
+            expected_sig = expected_sig[2:]
+
+        auth_header = storage._build_authorization(
+            method="PUT",
+            path="/obj",
+            headers=headers,
+            body=b"abc",
+        )
+
+        assert auth_header == f"GNFD1-ECDSA, Signature={expected_sig}"
+
 
 class TestGreenfieldStorageFactory:
     """Test storage factory with Greenfield backend."""
