@@ -49,3 +49,6 @@ dist/
 discover_test_data.py
 test_data_discovery.json
 
+bin
+key.txt
+pwdfile
