@@ -27,14 +27,26 @@ class FeedbackManager:
         self,
         web3_client: Web3Client,
         ipfs_client: Optional[IPFSClient] = None,
+        content_storage: Optional[Any] = None,  # ReputationStorage instance
         reputation_registry: Any = None,
         identity_registry: Any = None,
         subgraph_client: Optional[Any] = None,
         indexer: Optional[Any] = None,
     ):
-        """Initialize feedback manager."""
+        """Initialize feedback manager.
+
+        Args:
+            web3_client: Web3 client for blockchain interactions
+            ipfs_client: Legacy IPFS client (for backward compatibility)
+            content_storage: Unified reputation storage backend (IPFS or Greenfield)
+            reputation_registry: Reputation registry contract
+            identity_registry: Identity registry contract
+            subgraph_client: Subgraph client for querying indexed data
+            indexer: Agent indexer for search operations
+        """
         self.web3_client = web3_client
         self.ipfs_client = ipfs_client
+        self.content_storage = content_storage
         self.reputation_registry = reputation_registry
         self.identity_registry = identity_registry
         self.subgraph_client = subgraph_client
@@ -200,11 +212,37 @@ class FeedbackManager:
         # Handle off-chain file storage
         feedbackUri = ""
         feedbackHash = b"\x00" * 32  # Default empty hash
-        
-        if self.ipfs_client:
-            # Store feedback file on IPFS using Filecoin Pin
+
+        # Prefer content_storage over legacy ipfs_client
+        if self.content_storage:
+            # Store feedback file using unified storage backend
             try:
-                logger.debug("Storing feedback file on IPFS")
+                import os
+                logger.debug("Storing feedback file using content storage")
+
+                # Serialize feedback file
+                feedback_json = json.dumps(feedbackFile, sort_keys=True, ensure_ascii=False)
+                feedback_bytes = feedback_json.encode('utf-8')
+
+                # Calculate hash before storage
+                feedbackHash = self.web3_client.keccak256(feedback_bytes)
+
+                # Store using content_storage (supports both IPFS and Greenfield)
+                # Get txn_hash from environment if available (for Greenfield)
+                txn_hash = os.getenv("GREENFIELD_TXN_HASH")
+                key = self.content_storage.put(key="", data=feedback_bytes, txn_hash=txn_hash)
+
+                # Build URI using storage backend
+                feedbackUri = self.content_storage.build_uri(key)
+
+                logger.debug(f"Feedback file stored: {feedbackUri}")
+            except Exception as e:
+                logger.warning(f"Failed to store feedback using content storage: {e}")
+                # Continue without storage
+        elif self.ipfs_client:
+            # Fallback to legacy IPFS client
+            try:
+                logger.debug("Storing feedback file on IPFS (legacy)")
                 cid = self.ipfs_client.add_json(feedbackFile)
                 feedbackUri = f"ipfs://{cid}"
                 feedbackHash = self.web3_client.keccak256(json.dumps(feedbackFile, sort_keys=True).encode())
@@ -213,8 +251,8 @@ class FeedbackManager:
                 logger.warning(f"Failed to store feedback on IPFS: {e}")
                 # Continue without IPFS storage
         elif feedbackFile.get("context") or feedbackFile.get("capability") or feedbackFile.get("name"):
-            # If we have rich data but no IPFS, we need to store it somewhere
-            raise ValueError("Rich feedback data requires IPFS client for storage")
+            # If we have rich data but no storage, we need to store it somewhere
+            raise ValueError("Rich feedback data requires content storage or IPFS client")
         
         # Submit to blockchain
         try:

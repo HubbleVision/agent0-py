@@ -8,6 +8,7 @@ IPFS, BNB Greenfield, and future storage implementations.
 
 import logging
 import os
+import platform
 from typing import Any, Dict, Optional
 
 from .ipfs_client import IPFSClient
@@ -74,6 +75,14 @@ def create_reputation_storage(
         txn_hash = cfg.get("GREENFIELD_TXN_HASH") or os.getenv("GREENFIELD_TXN_HASH")
         content_type = cfg.get("GREENFIELD_CONTENT_TYPE") or os.getenv("GREENFIELD_CONTENT_TYPE", "application/octet-stream")
         timeout = int(cfg.get("GREENFIELD_TIMEOUT") or os.getenv("GREENFIELD_TIMEOUT", "30"))
+        greenfield_rpc_url = cfg.get("GREENFIELD_RPC_URL") or os.getenv("GREENFIELD_RPC_URL") or "https://gnfd-testnet-fullnode-tendermint-us.bnbchain.org:443"
+        chain_id_val = cfg.get("GREENFIELD_CHAIN_ID") or os.getenv("GREENFIELD_CHAIN_ID") or 5600
+        try:
+            greenfield_chain_id = int(chain_id_val)
+        except Exception:
+            greenfield_chain_id = 5600
+        cli_chain_id = cfg.get("GREENFIELD_CLI_CHAIN_ID") or os.getenv("GREENFIELD_CLI_CHAIN_ID")
+        create_object_template = cfg.get("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE") or os.getenv("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE")
 
         # Validate required parameters
         if not sp_host:
@@ -91,6 +100,36 @@ def create_reputation_storage(
                 "This should be the transaction hash from CreateObject operation."
             )
 
+        create_object_helper = None
+        if create_object_template:
+            # If running inside Linux container but template points to mac binary, try swapping to gnfd-cmd
+            if "gnfd-cmd_mac" in create_object_template and platform.system().lower() == "linux":
+                adjusted = create_object_template.replace("gnfd-cmd_mac", "gnfd-cmd")
+                if os.path.exists(adjusted.split()[0]):
+                    logger.info("Adjusted Greenfield CLI template for Linux: %s", adjusted)
+                    create_object_template = adjusted
+                else:
+                    logger.warning("Linux runtime detected but gnfd-cmd not found; template may fail: %s", create_object_template)
+
+            try:
+                from .greenfield_cli import GreenfieldCreateObjectHelper
+
+                create_object_helper = GreenfieldCreateObjectHelper(
+                    rpc_url=greenfield_rpc_url,
+                    sp_host=sp_host,
+                    bucket_name=bucket,
+                    private_key=private_key,
+                    chain_id=greenfield_chain_id,
+                    cli_chain_id=cli_chain_id,
+                    cli_template=create_object_template,
+                )
+                logger.info("Greenfield CLI helper enabled for uploads")
+            except Exception as helper_exc:  # pragma: no cover - defensive branch
+                logger.warning(
+                    "Failed to initialize Greenfield CLI helper, will fallback to HTTP uploads: %s",
+                    helper_exc,
+                )
+
         storage = GreenfieldReputationStorage(
             sp_host=sp_host,
             bucket=bucket,
@@ -98,6 +137,7 @@ def create_reputation_storage(
             txn_hash=txn_hash,
             content_type=content_type,
             timeout=timeout,
+            create_object_helper=create_object_helper,
         )
         logger.debug(f"Created Greenfield reputation storage: bucket={bucket}, sp_host={sp_host}")
         return storage

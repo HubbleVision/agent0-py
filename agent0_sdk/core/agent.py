@@ -593,21 +593,36 @@ class Agent:
 
     # Registration (on-chain)
     def registerIPFS(self) -> RegistrationFile:
-        """Register agent on-chain with IPFS flow (mint -> pin -> set URI) or update existing registration."""
+        """Register agent on-chain with storage backend (IPFS or Greenfield) or update existing registration."""
         # Validate basic info
         if not self.registration_file.name or not self.registration_file.description:
             raise ValueError("Agent must have name and description before registration")
-        
+
         if self.registration_file.agentId:
             # Agent already registered - update registration file and redeploy
             logger.debug("Agent already registered, updating registration file")
-            
-            # Upload updated registration file to IPFS
-            ipfsCid = self.sdk.ipfs_client.addRegistrationFile(
-                self.registration_file,
-                chainId=self.sdk.chain_id(),
-                identityRegistryAddress=self.sdk.identity_registry.address
-            )
+
+            # Upload updated registration file using content_storage or fallback to IPFS
+            if self.sdk.content_storage:
+                import os
+                # Use unified content storage (supports IPFS and Greenfield)
+                reg_dict = self.registration_file.to_dict(
+                    chain_id=self.sdk.chain_id(),
+                    identity_registry_address=self.sdk.identity_registry.address
+                )
+
+                # Store using content_storage
+                txn_hash = os.getenv("GREENFIELD_TXN_HASH")
+                key = self.sdk.content_storage.put_json(key="", data=reg_dict, txn_hash=txn_hash)
+                agentUri = self.sdk.content_storage.build_uri(key)
+            else:
+                # Fallback to legacy IPFS client
+                ipfsCid = self.sdk.ipfs_client.addRegistrationFile(
+                    self.registration_file,
+                    chainId=self.sdk.chain_id(),
+                    identityRegistryAddress=self.sdk.identity_registry.address
+                )
+                agentUri = f"ipfs://{ipfsCid}"
             
             # Update metadata on-chain if agent is already registered
             # Only send transactions for dirty (changed) metadata to save gas
@@ -638,7 +653,7 @@ class Agent:
                 self.sdk.identity_registry,
                 "setAgentUri",
                 agentId,
-                f"ipfs://{ipfsCid}"
+                agentUri
             )
             try:
                 self.sdk.web3_client.wait_for_transaction(txHash, timeout=30)
@@ -655,27 +670,42 @@ class Agent:
         else:
             # First time registration
             logger.debug("Registering agent for the first time")
-            
+
             # Step 1: Register on-chain without URI
             self._registerWithoutUri()
-            
+
             # Step 2: Prepare registration file with agent ID (already set by _registerWithoutUri)
             # No need to modify agentId as it's already set correctly
-            
-            # Step 3: Upload to IPFS
-            ipfsCid = self.sdk.ipfs_client.addRegistrationFile(
-                self.registration_file,
-                chainId=self.sdk.chain_id(),
-                identityRegistryAddress=self.sdk.identity_registry.address
-            )
-            
+
+            # Step 3: Upload using content_storage or fallback to IPFS
+            if self.sdk.content_storage:
+                import os
+                # Use unified content storage (supports IPFS and Greenfield)
+                reg_dict = self.registration_file.to_dict(
+                    chain_id=self.sdk.chain_id(),
+                    identity_registry_address=self.sdk.identity_registry.address
+                )
+
+                # Store using content_storage
+                txn_hash = os.getenv("GREENFIELD_TXN_HASH")
+                key = self.sdk.content_storage.put_json(key="", data=reg_dict, txn_hash=txn_hash)
+                agentUri = self.sdk.content_storage.build_uri(key)
+            else:
+                # Fallback to legacy IPFS client
+                ipfsCid = self.sdk.ipfs_client.addRegistrationFile(
+                    self.registration_file,
+                    chainId=self.sdk.chain_id(),
+                    identityRegistryAddress=self.sdk.identity_registry.address
+                )
+                agentUri = f"ipfs://{ipfsCid}"
+
             # Step 4: Set agent URI on-chain
             agentId = int(self.agentId.split(":")[-1])
             txHash = self.sdk.web3_client.transact_contract(
                 self.sdk.identity_registry,
                 "setAgentUri",
                 agentId,
-                f"ipfs://{ipfsCid}"
+                agentUri
             )
             try:
                 self.sdk.web3_client.wait_for_transaction(txHash, timeout=30)

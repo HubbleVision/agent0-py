@@ -28,6 +28,7 @@ from .indexer import AgentIndexer
 from .ipfs_client import IPFSClient
 from .feedback_manager import FeedbackManager
 from .subgraph_client import SubgraphClient
+from .storage_factory import create_reputation_storage
 
 
 class SDK:
@@ -41,7 +42,7 @@ class SDK:
         registryOverrides: Optional[Dict[ChainId, Dict[str, Address]]] = None,
         indexingStore: Optional[Any] = None,  # optional (e.g., sqlite/postgres/duckdb)
         embeddings: Optional[Any] = None,  # optional vector backend
-        # IPFS configuration
+        # IPFS configuration (legacy)
         ipfs: Optional[str] = None,  # "node", "filecoinPin", or "pinata"
         # Direct IPFS node config
         ipfsNodeUrl: Optional[str] = None,
@@ -49,6 +50,9 @@ class SDK:
         filecoinPrivateKey: Optional[str] = None,
         # Pinata config
         pinataJwt: Optional[str] = None,
+        # Reputation storage backend configuration
+        reputationBackend: Optional[str] = None,  # "ipfs" (default) or "greenfield"
+        greenfield: Optional[Dict[str, Any]] = None,  # Greenfield config dict
         # Subgraph configuration
         subgraphOverrides: Optional[Dict[ChainId, str]] = None,  # Override subgraph URLs per chain
     ):
@@ -109,19 +113,25 @@ class SDK:
             subgraph_url_overrides=self._subgraph_urls
         )
         
-        # Initialize IPFS client based on configuration
+        # Initialize IPFS client based on configuration (legacy support)
         self.ipfs_client = self._initialize_ipfs_client(
             ipfs, ipfsNodeUrl, filecoinPrivateKey, pinataJwt
         )
-        
+
+        # Initialize unified content storage (reputation backend)
+        self.content_storage = self._initialize_content_storage(
+            reputationBackend, greenfield, ipfsNodeUrl, filecoinPrivateKey, pinataJwt
+        )
+
         # Load registries before passing to FeedbackManager
         identity_registry = self.identity_registry
         reputation_registry = self.reputation_registry
-        
+
         self.feedback_manager = FeedbackManager(
             subgraph_client=self.subgraph_client,
             web3_client=self.web3_client,
             ipfs_client=self.ipfs_client,
+            content_storage=self.content_storage,  # New unified storage
             reputation_registry=reputation_registry,
             identity_registry=identity_registry,
             indexer=self.indexer  # Pass indexer for unified search interface
@@ -139,30 +149,30 @@ class SDK:
         return registries
 
     def _initialize_ipfs_client(
-        self, 
-        ipfs: Optional[str], 
-        ipfsNodeUrl: Optional[str], 
-        filecoinPrivateKey: Optional[str], 
+        self,
+        ipfs: Optional[str],
+        ipfsNodeUrl: Optional[str],
+        filecoinPrivateKey: Optional[str],
         pinataJwt: Optional[str]
     ) -> Optional[IPFSClient]:
         """Initialize IPFS client based on configuration."""
         if not ipfs:
             return None
-            
+
         if ipfs == "node":
             if not ipfsNodeUrl:
                 raise ValueError("ipfsNodeUrl is required when ipfs='node'")
             return IPFSClient(url=ipfsNodeUrl, filecoin_pin_enabled=False)
-            
+
         elif ipfs == "filecoinPin":
             if not filecoinPrivateKey:
                 raise ValueError("filecoinPrivateKey is required when ipfs='filecoinPin'")
             return IPFSClient(
-                url=None, 
-                filecoin_pin_enabled=True, 
+                url=None,
+                filecoin_pin_enabled=True,
                 filecoin_private_key=filecoinPrivateKey
             )
-            
+
         elif ipfs == "pinata":
             if not pinataJwt:
                 raise ValueError("pinataJwt is required when ipfs='pinata'")
@@ -172,9 +182,82 @@ class SDK:
                 pinata_enabled=True,
                 pinata_jwt=pinataJwt
             )
-            
+
         else:
             raise ValueError(f"Invalid ipfs value: {ipfs}. Must be 'node', 'filecoinPin', or 'pinata'")
+
+    def _initialize_content_storage(
+        self,
+        reputationBackend: Optional[str],
+        greenfield: Optional[Dict[str, Any]],
+        ipfsNodeUrl: Optional[str],
+        filecoinPrivateKey: Optional[str],
+        pinataJwt: Optional[str]
+    ):
+        """Initialize unified content storage for reputation data.
+
+        This method creates a ReputationStorage instance based on the configured backend.
+        Supports both IPFS and Greenfield, with automatic fallback to IPFS if needed.
+
+        Args:
+            reputationBackend: Storage backend ("ipfs" or "greenfield")
+            greenfield: Greenfield configuration dict (spHost, bucket, privateKey, etc.)
+            ipfsNodeUrl: IPFS node URL (for IPFS backend)
+            filecoinPrivateKey: Filecoin private key (for IPFS backend)
+            pinataJwt: Pinata JWT token (for IPFS backend)
+
+        Returns:
+            ReputationStorage instance
+        """
+        import os
+
+        # Build storage configuration from parameters and environment
+        storage_cfg = {
+            "REPUTATION_BACKEND": reputationBackend or os.getenv("REPUTATION_BACKEND", "ipfs"),
+        }
+
+        # Add Greenfield config (from parameters or environment)
+        if greenfield:
+            # If greenfield dict provided, prioritize its values over environment
+            storage_cfg.update({
+                "GREENFIELD_SP_HOST": greenfield.get("spHost") or os.getenv("GREENFIELD_SP_HOST"),
+                "GREENFIELD_BUCKET": greenfield.get("bucket") or os.getenv("GREENFIELD_BUCKET"),
+                "GREENFIELD_PRIVATE_KEY": greenfield.get("privateKey") or os.getenv("GREENFIELD_PRIVATE_KEY"),
+                "GREENFIELD_TXN_HASH": greenfield.get("txnHash") or os.getenv("GREENFIELD_TXN_HASH"),
+                "GREENFIELD_CONTENT_TYPE": greenfield.get("contentType") or os.getenv("GREENFIELD_CONTENT_TYPE"),
+                "GREENFIELD_TIMEOUT": greenfield.get("timeout") or os.getenv("GREENFIELD_TIMEOUT"),
+                "GREENFIELD_RPC_URL": greenfield.get("rpcUrl") or os.getenv("GREENFIELD_RPC_URL"),
+                "GREENFIELD_CHAIN_ID": greenfield.get("chainId") or os.getenv("GREENFIELD_CHAIN_ID"),
+                "GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE": greenfield.get("createObjectTemplate") or os.getenv("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE"),
+            })
+        else:
+            # No greenfield dict provided, read from environment
+            storage_cfg.update({
+                "GREENFIELD_SP_HOST": os.getenv("GREENFIELD_SP_HOST"),
+                "GREENFIELD_BUCKET": os.getenv("GREENFIELD_BUCKET"),
+                "GREENFIELD_PRIVATE_KEY": os.getenv("GREENFIELD_PRIVATE_KEY"),
+                "GREENFIELD_TXN_HASH": os.getenv("GREENFIELD_TXN_HASH"),
+                "GREENFIELD_CONTENT_TYPE": os.getenv("GREENFIELD_CONTENT_TYPE"),
+                "GREENFIELD_TIMEOUT": os.getenv("GREENFIELD_TIMEOUT"),
+                "GREENFIELD_RPC_URL": os.getenv("GREENFIELD_RPC_URL"),
+                "GREENFIELD_CHAIN_ID": os.getenv("GREENFIELD_CHAIN_ID"),
+                "GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE": os.getenv("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE"),
+            })
+
+        # Add IPFS config
+        storage_cfg.update({
+            "IPFS_API_URL": ipfsNodeUrl or os.getenv("IPFS_API_URL"),
+            "PINATA_ENABLED": str(bool(pinataJwt)).lower() if pinataJwt else os.getenv("PINATA_ENABLED"),
+            "PINATA_JWT": pinataJwt or os.getenv("PINATA_JWT"),
+            "FILECOIN_PIN_ENABLED": str(bool(filecoinPrivateKey)).lower() if filecoinPrivateKey else os.getenv("FILECOIN_PIN_ENABLED"),
+            "FILECOIN_PRIVATE_KEY": filecoinPrivateKey or os.getenv("FILECOIN_PRIVATE_KEY"),
+        })
+
+        # Create storage using factory (will use ipfs_client if available)
+        return create_reputation_storage(
+            config=storage_cfg,
+            ipfs_client=self.ipfs_client
+        )
 
     @property
     def isReadOnly(self) -> bool:

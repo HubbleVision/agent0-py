@@ -118,9 +118,14 @@ class AgentIndexer:
             return None
 
     def _detect_uri_type(self, uri: str) -> str:
-        """Detect URI type (ipfs, https, http, unknown)."""
+        """Detect URI type (ipfs, greenfield, https, http, unknown)."""
         if uri.startswith("ipfs://"):
             return "ipfs"
+        elif uri.startswith("gnfd://"):
+            return "greenfield"
+        elif uri.startswith("https://") and ".bnbchain.org" in uri:
+            # Greenfield SP URLs (virtual-hosted-style: https://bucket.sp_host/key)
+            return "greenfield"
         elif uri.startswith("https://"):
             return "https"
         elif uri.startswith("http://"):
@@ -186,17 +191,35 @@ class AgentIndexer:
         return None
 
     async def _fetch_registration_file(self, uri: str) -> Optional[Dict[str, Any]]:
-        """Fetch registration file from IPFS or HTTPS."""
+        """Fetch registration file from IPFS, Greenfield, or HTTPS."""
         uri_type = self._detect_uri_type(uri)
-        
+
         if uri_type == "ipfs":
             # Normalize bare CID to ipfs:// format
             if not uri.startswith("ipfs://"):
                 uri = f"ipfs://{uri}"
-            
+
             # Use existing IPFS client (if available)
             # For now, return None as IPFS fetching is handled by subgraph
             return None
+        elif uri_type == "greenfield":
+            # Greenfield URI (gnfd:// or https://bucket.sp_host/key)
+            # Convert gnfd:// to https:// format if needed
+            if uri.startswith("gnfd://"):
+                # gnfd://bucket/key format
+                parts = uri[7:].split("/", 1)
+                if len(parts) == 2:
+                    bucket, key = parts
+                    # Default to testnet SP (can be configured via environment)
+                    import os
+                    sp_host = os.getenv("GREENFIELD_SP_HOST", "gnfd-testnet-sp1.bnbchain.org")
+                    uri = f"https://{bucket}.{sp_host}/{key}"
+                else:
+                    logger.warning(f"Invalid gnfd:// URI format: {uri}")
+                    return None
+
+            # Fetch directly from Greenfield HTTPS endpoint
+            return await self._fetch_http_content(uri)
         elif uri_type in ["https", "http"]:
             # Check if it's an IPFS gateway URL
             if self._is_ipfs_gateway_url(uri):
@@ -204,7 +227,7 @@ class AgentIndexer:
                 if ipfs_uri:
                     # Try to fetch as IPFS first
                     return await self._fetch_registration_file(ipfs_uri)
-            
+
             # Fetch directly from HTTPS
             return await self._fetch_http_content(uri)
         else:
@@ -212,17 +235,35 @@ class AgentIndexer:
             return None
 
     async def _fetch_feedback_file(self, uri: str) -> Optional[Dict[str, Any]]:
-        """Fetch feedback file from IPFS or HTTPS."""
+        """Fetch feedback file from IPFS, Greenfield, or HTTPS."""
         uri_type = self._detect_uri_type(uri)
-        
+
         if uri_type == "ipfs":
             # Normalize bare CID to ipfs:// format
             if not uri.startswith("ipfs://"):
                 uri = f"ipfs://{uri}"
-            
+
             # Use existing IPFS client (if available)
             # For now, return None as IPFS fetching is handled by subgraph
             return None
+        elif uri_type == "greenfield":
+            # Greenfield URI (gnfd:// or https://bucket.sp_host/key)
+            # Convert gnfd:// to https:// format if needed
+            if uri.startswith("gnfd://"):
+                # gnfd://bucket/key format
+                parts = uri[7:].split("/", 1)
+                if len(parts) == 2:
+                    bucket, key = parts
+                    # Default to testnet SP (can be configured via environment)
+                    import os
+                    sp_host = os.getenv("GREENFIELD_SP_HOST", "gnfd-testnet-sp1.bnbchain.org")
+                    uri = f"https://{bucket}.{sp_host}/{key}"
+                else:
+                    logger.warning(f"Invalid gnfd:// URI format: {uri}")
+                    return None
+
+            # Fetch directly from Greenfield HTTPS endpoint
+            return await self._fetch_http_content(uri)
         elif uri_type in ["https", "http"]:
             # Check if it's an IPFS gateway URL
             if self._is_ipfs_gateway_url(uri):

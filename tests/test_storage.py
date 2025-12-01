@@ -152,6 +152,18 @@ class TestIpfsReputationStorage:
         mock_ipfs.get_json.assert_called_once_with("QmJsonCID")
         assert result_data == {"score": 5, "text": "great agent"}
 
+    def test_build_uri_returns_ipfs_uri(self):
+        """Test that build_uri() returns proper IPFS URI."""
+        # Setup: Create mock IPFS client
+        mock_ipfs = Mock(spec=IPFSClient)
+        storage = IpfsReputationStorage(client=mock_ipfs)
+
+        # Execute: Build URI for CID
+        uri = storage.build_uri(key="QmTestCID12345")
+
+        # Verify: Returns ipfs:// URI
+        assert uri == "ipfs://QmTestCID12345"
+
 
 class TestStorageFactory:
     """Test storage factory function."""
@@ -610,6 +622,107 @@ class TestGreenfieldReputationStorage:
         )
 
         assert auth_header == f"GNFD1-ECDSA, Signature={expected_sig}"
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_put_json_stores_json_on_greenfield(self, mock_session_class):
+        """Test that put_json() stores JSON data on Greenfield."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.headers = {"ETag": "json-etag", "X-Gnfd-Request-ID": "req-json"}
+        mock_session.put.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xabcdef123456",
+        )
+
+        # Execute: Store JSON data
+        test_data = {"score": 5, "feedback": "excellent"}
+        result_key = storage.put_json(key="feedback.json", data=test_data, txn_hash="0xjson_hash")
+
+        # Verify: put() was called with JSON bytes
+        assert result_key == "feedback.json"
+        mock_session.put.assert_called_once()
+        call_args = mock_session.put.call_args
+        # Verify data was JSON serialized
+        data = call_args[1]['data']
+        parsed = json.loads(data.decode('utf-8'))
+        assert parsed == test_data
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_get_json_retrieves_json_from_greenfield(self, mock_session_class):
+        """Test that get_json() retrieves and parses JSON from Greenfield."""
+        # Setup: Mock requests session
+        mock_session = Mock()
+        mock_response = Mock()
+        test_data = {"score": 5, "feedback": "excellent"}
+        mock_response.content = json.dumps(test_data).encode('utf-8')
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xabcdef123456",
+        )
+
+        # Execute: Retrieve JSON data
+        result_data = storage.get_json(key="feedback.json")
+
+        # Verify: Correct data retrieved and parsed
+        assert result_data == test_data
+        mock_session.get.assert_called_once()
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_build_uri_returns_greenfield_https_uri(self, mock_session_class):
+        """Test that build_uri() returns proper Greenfield HTTPS URI."""
+        # Setup: Mock requests session (not used for build_uri)
+        mock_session_class.return_value = Mock()
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xabcdef123456",
+        )
+
+        # Execute: Build URI for object key
+        uri = storage.build_uri(key="reputation/feedback.json")
+
+        # Verify: Returns virtual-hosted-style HTTPS URI
+        assert uri == "https://test-bucket.gnfd-testnet-sp1.bnbchain.org/reputation/feedback.json"
+
+    @patch('agent0_sdk.core.greenfield_storage.requests.Session')
+    def test_build_uri_handles_special_characters(self, mock_session_class):
+        """Test that build_uri() properly URL-encodes special characters."""
+        mock_session_class.return_value = Mock()
+
+        from agent0_sdk.core.greenfield_storage import GreenfieldReputationStorage
+
+        storage = GreenfieldReputationStorage(
+            sp_host="gnfd-testnet-sp1.bnbchain.org",
+            bucket="test-bucket",
+            private_key="0x" + "1" * 64,
+            txn_hash="0xabcdef123456",
+        )
+
+        # Execute: Build URI with special characters
+        uri = storage.build_uri(key="path with spaces/中文.json")
+
+        # Verify: Special characters are URL-encoded, but slashes preserved
+        assert "path%20with%20spaces/" in uri
+        assert uri.startswith("https://test-bucket.gnfd-testnet-sp1.bnbchain.org/")
 
 
 class TestGreenfieldStorageFactory:

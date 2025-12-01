@@ -16,10 +16,12 @@ Reference:
 """
 
 import hashlib
+import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any, Dict, Optional
 from urllib.parse import quote
 
 import requests
@@ -46,6 +48,7 @@ class GreenfieldReputationStorage(ReputationStorage):
         txn_hash: Optional[str] = None,
         content_type: str = "application/octet-stream",
         timeout: int = 30,
+        create_object_helper: Optional[Any] = None,
     ):
         """Initialize Greenfield reputation storage.
 
@@ -74,6 +77,7 @@ class GreenfieldReputationStorage(ReputationStorage):
         self.default_txn_hash = txn_hash.strip() if txn_hash else None
         self.content_type = content_type
         self.timeout = timeout
+        self._create_object_helper = create_object_helper
 
         # Initialize account from private key
         if not private_key.startswith("0x"):
@@ -111,6 +115,24 @@ class GreenfieldReputationStorage(ReputationStorage):
             ValueError: If no txn_hash is available (neither provided nor default)
             RuntimeError: If upload fails
         """
+        # Generate key if not provided
+        object_key = key.strip() if key else self._gen_key()
+
+        # If CLI helper exists, prefer auto CreateObject+Put (avoids stale txn_hash reuse)
+        force_http = os.getenv("GREENFIELD_FORCE_HTTP_PUT", "0") == "1"
+        if self._create_object_helper and not force_http:
+            txn_created = self._create_object_helper.upload_via_cli(
+                object_name=object_key,
+                data=data,
+                content_type=self.content_type,
+            )
+            logger.info(
+                "Uploaded to Greenfield via CLI: key=%s, txn_hash=%s",
+                object_key,
+                txn_created,
+            )
+            return object_key
+
         # Determine which txn_hash to use (prioritize parameter over default)
         effective_txn_hash = txn_hash if txn_hash else self.default_txn_hash
 
@@ -119,9 +141,6 @@ class GreenfieldReputationStorage(ReputationStorage):
                 "txn_hash is required for Greenfield PutObject operation. "
                 "Provide it either in constructor or in put() call."
             )
-
-        # Generate key if not provided
-        object_key = key.strip() if key else self._gen_key()
 
         # Build URL (using virtual-hosted-style)
         # Preserve slashes in path to match canonical request signing (safe='/')
@@ -164,10 +183,38 @@ class GreenfieldReputationStorage(ReputationStorage):
             return object_key
 
         except requests.exceptions.RequestException as e:
+            logger.warning(
+                "HTTP upload to Greenfield failed (key=%s): %s. Response=%s",
+                object_key,
+                e,
+                getattr(getattr(e, "response", None), "text", None),
+            )
+
+            # If CLI helper is configured, try CLI-based upload as fallback
+            if self._create_object_helper:
+                try:
+                    txn_created = self._create_object_helper.upload_via_cli(
+                        object_name=object_key,
+                        data=data,
+                        content_type=self.content_type,
+                    )
+                    logger.info(
+                        "Fallback CLI upload succeeded: key=%s, txn_hash=%s",
+                        object_key,
+                        txn_created,
+                    )
+                    return object_key
+                except Exception as cli_exc:  # pragma: no cover - defensive branch
+                    logger.error(
+                        "CLI fallback upload failed (key=%s): %s",
+                        object_key,
+                        cli_exc,
+                        exc_info=True,
+                    )
+
             error_msg = f"Failed to upload to Greenfield (key={object_key}): {e}"
             if hasattr(e, "response") and e.response is not None:
                 error_msg += f" Response: {e.response.text}"
-            logger.error(error_msg)
             raise RuntimeError(error_msg) from e
 
     def get(self, key: str) -> bytes:
@@ -353,3 +400,47 @@ class GreenfieldReputationStorage(ReputationStorage):
         # Use Web3's keccak for compatibility with Greenfield
         from eth_utils import keccak
         return keccak(data)
+
+    def put_json(self, key: str, data: Dict[str, Any], txn_hash: Optional[str] = None) -> str:
+        """Store JSON data on Greenfield and return object key.
+
+        Args:
+            key: Object key/name (if empty, auto-generates UUID-based key)
+            data: Dictionary to store as JSON
+            txn_hash: Optional transaction hash from CreateObject operation
+
+        Returns:
+            Object key (name) that can be used to retrieve the data
+        """
+        json_bytes = json.dumps(data, sort_keys=True, ensure_ascii=False).encode('utf-8')
+        return self.put(key=key, data=json_bytes, txn_hash=txn_hash)
+
+    def get_json(self, key: str) -> Dict[str, Any]:
+        """Retrieve JSON data from Greenfield by object key.
+
+        Args:
+            key: Object key (name) to retrieve
+
+        Returns:
+            Dictionary parsed from JSON
+
+        Raises:
+            RuntimeError: If retrieval or parsing fails
+        """
+        try:
+            data_bytes = self.get(key)
+            return json.loads(data_bytes.decode('utf-8'))
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Failed to parse JSON from Greenfield (key: {key}): {e}") from e
+
+    def build_uri(self, key: str) -> str:
+        """Build Greenfield URI for the stored data.
+
+        Args:
+            key: Object key (name) in Greenfield
+
+        Returns:
+            HTTPS URI in the format "https://bucket.sp_host/key"
+        """
+        # Use virtual-hosted-style URL (bucket subdomain)
+        return f"https://{self.bucket}.{self.sp_host}/{quote(key, safe='/')}"

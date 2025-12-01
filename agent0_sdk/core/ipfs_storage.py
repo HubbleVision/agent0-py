@@ -113,3 +113,14 @@ class IpfsReputationStorage(ReputationStorage):
             return self.client.get_json(key)
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve JSON from IPFS (CID: {key}): {e}") from e
+
+    def build_uri(self, key: str) -> str:
+        """Build IPFS URI for the stored data.
+
+        Args:
+            key: IPFS CID (Content Identifier)
+
+        Returns:
+            IPFS URI in the format "ipfs://CID"
+        """
+        return f"ipfs://{key}"

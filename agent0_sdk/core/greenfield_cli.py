@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import os
+import platform
 import re
 import subprocess
 import tempfile
@@ -57,7 +58,8 @@ class GreenfieldCreateObjectHelper:
             cli_template: Optional CLI template for CreateObject
         """
         self.rpc_url = rpc_url
-        self.chain_id = self._normalize_chain_id_int(chain_id)
+        chain_id_int = self._normalize_chain_id_int(chain_id)
+        self.chain_id = chain_id_int
         self.cli_chain_id = cli_chain_id or self._derive_cli_chain_id(chain_id)
         self.sp_host = sp_host
         self.bucket_name = bucket_name
@@ -81,13 +83,13 @@ class GreenfieldCreateObjectHelper:
         self.account = Account.from_key(private_key)
 
         # Greenfield contract addresses (testnet)
-        if chain_id == 5600:  # Testnet
+        if chain_id_int == 5600:  # Testnet
             # Deployed BucketHub proxy from deployment/5611-deployment.json
             self.bucket_hub_address = "0xCAB5728B7cc21D0056E237D371b28efEEBFd8C2d"
-        elif chain_id == 1017:  # Mainnet (placeholder, update when confirmed)
+        elif chain_id_int == 1017:  # Mainnet (placeholder, update when confirmed)
             self.bucket_hub_address = "0xE909754263572F71bc6aFAc837646A93f5818573"
         else:
-            raise ValueError(f"Unsupported chain ID: {chain_id}")
+            raise ValueError(f"Unsupported chain ID: {chain_id_int}")
 
         logger.info(
             f"Initialized Greenfield helper: "
@@ -196,6 +198,33 @@ class GreenfieldCreateObjectHelper:
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
 
+    def upload_via_cli(
+        self,
+        object_name: str,
+        data: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        """Create and upload an object via gnfd-cmd in a synchronous way.
+
+        This helper is used by synchronous SDK flows (e.g., Celery tasks) that
+        cannot await the async auto-uploader. It relies on the configured
+        `GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE` to perform both CreateObject and
+        PutObject in one command, returning the resulting transaction hash (or
+        object key fallback when txn hash is missing but upload succeeded).
+        """
+
+        # Ensure CLI keystore/default account is ready
+        self._ensure_cli_account()
+
+        txn_hash = self._create_object_via_cli(
+            bucket_name=self.bucket_name,
+            object_name=object_name,
+            content_type=content_type,
+            data=data,
+        )
+
+        return txn_hash
+
     def _build_create_object_calldata(
         self,
         bucket_name: str,
@@ -276,7 +305,11 @@ class GreenfieldCreateObjectHelper:
         tokens = shlex.split(self.cli_template)
         if not tokens:
             raise RuntimeError("CLI template is empty")
-        self._cli_bin = tokens[0]
+        self._cli_bin = self._prefer_linux_cli(tokens[0])
+        if self._cli_bin != tokens[0]:
+            tokens[0] = self._cli_bin
+            # keep template consistent for later formatting
+            self.cli_template = " ".join(tokens)
 
         # Write private key and password files
         priv_file = tempfile.NamedTemporaryFile(delete=False)
@@ -344,6 +377,15 @@ class GreenfieldCreateObjectHelper:
             return "greenfield_1017-1"
         return "greenfield_5600-1"
 
+    def _prefer_linux_cli(self, cli_bin: str) -> str:
+        """Swap macOS gnfd-cmd binary to Linux one when running in containers."""
+        if "gnfd-cmd_mac" in cli_bin and platform.system().lower() == "linux":
+            candidate = cli_bin.replace("gnfd-cmd_mac", "gnfd-cmd")
+            if os.path.exists(candidate):
+                logger.info("Switching gnfd-cmd_mac to gnfd-cmd for Linux runtime: %s -> %s", cli_bin, candidate)
+                return candidate
+        return cli_bin
+
     def _create_object_via_cli(
         self,
         bucket_name: str,
@@ -378,7 +420,10 @@ class GreenfieldCreateObjectHelper:
         tokens = shlex.split(template)
         if not tokens:
             raise RuntimeError("CLI template is empty")
-        cli_bin = tokens[0]
+        cli_bin = self._prefer_linux_cli(tokens[0])
+        if cli_bin != tokens[0]:
+            tokens[0] = cli_bin
+            template = " ".join(tokens)
         password_snippet = f"--passwordfile {password_file} " if password_file else ""
         bypass_snippet = "--bypassSeal " if bypass_seal else ""
 
