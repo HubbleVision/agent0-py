@@ -2,6 +2,7 @@
 Smart contract ABIs and interfaces for ERC-8004.
 """
 
+import os
 from typing import Dict, List, Any
 
 # ERC-721 ABI (minimal required functions)
@@ -487,6 +488,16 @@ DEFAULT_REGISTRIES: Dict[int, Dict[str, str]] = {
         "REPUTATION": "0x8004bd8483b99310df121c46ED8858616b2Bba02",
         "VALIDATION": "0x8004c44d1EFdd699B2A26e781eF7F77c56A9a4EB",
     },
+    97: {  # BNB Testnet
+        "IDENTITY": os.getenv("BNB_TESTNET_IDENTITY", "0xf04A7eEeB7f99631DD08D9C6418ED8f9a8A03292"),
+        "REPUTATION": os.getenv("BNB_TESTNET_REPUTATION", "0x50100029Ac4E6F42505F5773841c03bcfB60181F"),
+        "VALIDATION": os.getenv("BNB_TESTNET_VALIDATION", "0x8366684cCE2266aD632bfE78E784007848E05E3a"),
+    },
+    56: {  # BNB Mainnet
+        "IDENTITY": os.getenv("BNB_MAINNET_IDENTITY", ""),
+        "REPUTATION": os.getenv("BNB_MAINNET_REPUTATION", ""),
+        "VALIDATION": os.getenv("BNB_MAINNET_VALIDATION", ""),
+    },
 }
 
 # Default subgraph URLs for different chains
@@ -494,4 +505,6 @@ DEFAULT_SUBGRAPH_URLS: Dict[int, str] = {
     11155111: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/6wQRC7geo9XYAhckfmfo8kbMRLeWU8KQd3XsJqFKmZLT",  # Ethereum Sepolia
     84532: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa",  # Base Sepolia
     80002: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/2A1JB18r1mF2VNP4QBH4mmxd74kbHoM6xLXC8ABAKf7j",  # Polygon Amoy
+    97: os.getenv("SUBGRAPH_URL_BNB_TESTNET", ""),  # BNB Testnet - empty means fallback to on-chain calls
+    56: os.getenv("SUBGRAPH_URL_BNB_MAINNET", ""),  # BNB Mainnet - empty means fallback to on-chain calls
 }
