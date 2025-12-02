@@ -78,18 +78,45 @@ def get_rpc_url(chain_id: int) -> str:
             signer=AGENT_PRIVATE_KEY
         )
     """
-    return os.getenv("RPC_URL", DEFAULT_RPC_URLS.get(chain_id, DEFAULT_RPC_URLS[DEFAULT_CHAIN_ID]))
+    # First check for chain-specific RPC URL override (e.g., RPC_URL_97)
+    chain_specific_env_var = f"RPC_URL_{chain_id}"
+    chain_specific_url = os.getenv(chain_specific_env_var)
+    if chain_specific_url:
+        return chain_specific_url
+
+    # Fall back to global RPC URL override for backward compatibility
+    # (This maintains existing behavior while allowing chain-specific overrides)
+    global_rpc_url = os.getenv("RPC_URL")
+    if global_rpc_url:
+        return global_rpc_url
+
+    # Finally, use the default RPC URL for the requested chain
+    return DEFAULT_RPC_URLS.get(chain_id, DEFAULT_RPC_URLS[DEFAULT_CHAIN_ID])
 
 
 def get_subgraph_url(chain_id: int) -> str:
     """Get Subgraph URL for a specific chain (if available).
 
     Returns empty string if no subgraph is available (will use on-chain calls).
+
+    Environment variable priority:
+    1. Chain-specific: SUBGRAPH_URL_97, SUBGRAPH_URL_84532, etc.
+    2. Global fallback: SUBGRAPH_URL (for backward compatibility)
+    3. Default: DEFAULT_SUBGRAPH_URLS for the chain
     """
-    return os.getenv(
-        f"SUBGRAPH_URL_{chain_id}",
-        DEFAULT_SUBGRAPH_URLS.get(chain_id, "")
-    )
+    # First check for chain-specific subgraph URL override (e.g., SUBGRAPH_URL_97)
+    chain_specific_env_var = f"SUBGRAPH_URL_{chain_id}"
+    chain_specific_url = os.getenv(chain_specific_env_var)
+    if chain_specific_url:
+        return chain_specific_url
+
+    # Fall back to global subgraph URL override for backward compatibility
+    global_subgraph_url = os.getenv("SUBGRAPH_URL")
+    if global_subgraph_url:
+        return global_subgraph_url
+
+    # Finally, use the default subgraph URL for the requested chain
+    return DEFAULT_SUBGRAPH_URLS.get(chain_id, "")
 
 
 def print_config():
@@ -103,6 +130,11 @@ def print_config():
     print(f"  SUBGRAPH_URL: {SUBGRAPH_URL[:50] if SUBGRAPH_URL else '(empty - use on-chain)'}...")
     print(f"  AGENT_ID: {AGENT_ID}")
     print()
+    print("Environment Variable Overrides:")
+    print("  Chain-specific RPC URLs: RPC_URL_97, RPC_URL_84532, etc.")
+    print("  Chain-specific Subgraph URLs: SUBGRAPH_URL_97, SUBGRAPH_URL_84532, etc.")
+    print("  Global fallbacks: RPC_URL, SUBGRAPH_URL (for backward compatibility)")
+    print()
     print("Supported Chains:")
     for chain_id, rpc in DEFAULT_RPC_URLS.items():
         chain_names = {
@@ -113,5 +145,16 @@ def print_config():
             97: "BNB Testnet",
             56: "BNB Mainnet",
         }
-        print(f"  {chain_id}: {chain_names.get(chain_id, 'Unknown')} - {rpc[:50]}...")
+
+        # Show current RPC URL for this chain
+        current_rpc = get_rpc_url(chain_id)
+        current_subgraph = get_subgraph_url(chain_id)
+
+        print(f"  {chain_id} ({chain_names.get(chain_id, 'Unknown')}):")
+        print(f"    Default RPC: {rpc[:50]}...")
+        print(f"    Current RPC: {current_rpc[:50]}...")
+        if current_subgraph:
+            print(f"    Current Subgraph: {current_subgraph[:50]}...")
+        else:
+            print(f"    Current Subgraph: (on-chain calls only)")
     print()
