@@ -55,7 +55,7 @@ DEFAULT_SUBGRAPH_URLS = {
     11155111: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/6wQRC7geo9XYAhckfmfo8kbMRLeWU8KQd3XsJqFKmZLT",
     84532: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa",
     80002: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/2A1JB18r1mF2VNP4QBH4mmxd74kbHoM6xLXC8ABAKf7j",
-    97: "",  # BNB Testnet - no subgraph yet, will use on-chain calls
+    97: "https://api.studio.thegraph.com/query/1717296/erc-8004-bsc-testnet/version/latest",  # BNB Testnet subgraph
     56: "",  # BNB Mainnet - no subgraph yet, will use on-chain calls
 }
 

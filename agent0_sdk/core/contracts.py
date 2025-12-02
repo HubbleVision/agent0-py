@@ -3,7 +3,7 @@ Smart contract ABIs and interfaces for ERC-8004.
 """
 
 import os
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 # ERC-721 ABI (minimal required functions)
 ERC721_ABI = [
@@ -505,6 +505,6 @@ DEFAULT_SUBGRAPH_URLS: Dict[int, str] = {
     11155111: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/6wQRC7geo9XYAhckfmfo8kbMRLeWU8KQd3XsJqFKmZLT",  # Ethereum Sepolia
     84532: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa",  # Base Sepolia
     80002: "https://gateway.thegraph.com/api/00a452ad3cd1900273ea62c1bf283f93/subgraphs/id/2A1JB18r1mF2VNP4QBH4mmxd74kbHoM6xLXC8ABAKf7j",  # Polygon Amoy
-    97: os.getenv("SUBGRAPH_URL_BNB_TESTNET", ""),  # BNB Testnet - empty means fallback to on-chain calls
+    97: os.getenv("SUBGRAPH_URL_BNB_TESTNET", "https://api.studio.thegraph.com/query/1717296/erc-8004-bsc-testnet/version/latest"),  # BNB Testnet - empty means fallback to on-chain calls
     56: os.getenv("SUBGRAPH_URL_BNB_MAINNET", ""),  # BNB Mainnet - empty means fallback to on-chain calls
 }

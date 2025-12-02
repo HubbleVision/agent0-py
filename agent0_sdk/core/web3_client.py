@@ -17,6 +17,17 @@ except ImportError:
         "Web3 dependencies not installed. Install with: pip install web3 eth-account"
     )
 
+# Optional PoA middleware (name differs across Web3 versions)
+try:
+    from web3.middleware import geth_poa_middleware  # Web3 v6
+except Exception:  # pragma: no cover - compatibility import
+    geth_poa_middleware = None
+
+try:
+    from web3.middleware import ExtraDataToPOAMiddleware  # Web3 v7+
+except Exception:  # pragma: no cover - compatibility import
+    ExtraDataToPOAMiddleware = None
+
 
 class Web3Client:
     """Web3 client for interacting with ERC-8004 smart contracts."""
@@ -30,6 +41,17 @@ class Web3Client:
         """Initialize Web3 client."""
         self.rpc_url = rpc_url
         self.w3 = Web3(Web3.HTTPProvider(rpc_url))
+
+        # BSC/other PoA chains require extraData len workaround
+        try:
+            if geth_poa_middleware:
+                self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+            elif 'ExtraDataToPOAMiddleware' in globals() and ExtraDataToPOAMiddleware:
+                self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        except ValueError:
+            # Already injected or not supported; safe to ignore
+            pass
+
         if not self.w3.is_connected():
             raise ConnectionError("Failed to connect to Ethereum node")
         
