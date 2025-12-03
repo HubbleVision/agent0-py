@@ -11,20 +11,16 @@ Phase 4 of the BNB Greenfield reputation storage integration has been successful
 ### 2024-11-28 - Documentation Enhancement
 Added comprehensive FAQ to address common questions about Greenfield's unique upload workflow:
 - **New File**: `docs/GREENFIELD_FAQ.md` (300+ lines)
-  - Explains why txn_hash is needed **before** upload
   - Clarifies the two-step process (CreateObject → PutObject)
-  - Answers 20+ common questions about txn_hash usage
   - Provides troubleshooting guidance
   - Compares with IPFS/S3 workflows
 
 - **Updated Documentation**:
   - Added clear explanation of two-step process in `greenfield_integration_guide.md`
-  - Added warning about txn_hash requirement in `GREENFIELD_QUICKSTART.md`
   - Added process overview in `greenfield_usage_examples.md`
   - Added process explanation in `PHASE4_COMPLETION_SUMMARY.md`
   - Cross-linked FAQ across all documentation
 
-**Motivation**: User feedback indicated confusion about why txn_hash is required before uploading, which is counterintuitive compared to traditional storage systems.
 
 ## Deliverables
 
@@ -37,7 +33,6 @@ A comprehensive integration test suite has been created with the following test 
 **TestGreenfieldIntegration** - Core functionality tests:
 - ✅ `test_put_and_get_roundtrip` - Verifies data upload and retrieval integrity
 - ✅ `test_put_with_auto_generated_key` - Tests UUID-based key generation
-- ✅ `test_put_with_per_object_txn_hash` - Validates per-object transaction hash support
 - ✅ `test_get_nonexistent_object_raises_error` - Error handling for missing objects
 - ✅ `test_put_large_data` - Tests handling of larger payloads (1MB)
 - ✅ `test_put_binary_data_integrity` - Verifies binary data integrity across roundtrip
@@ -152,7 +147,6 @@ A comprehensive 500+ line usage guide with:
 #### `.env.greenfield.example` Enhancements
 - Added integration testing environment variables:
   - `GREENFIELD_SP_HOST_ALT` - Alternative SP for failover testing
-  - `GREENFIELD_TXN_HASH_ALT` - Alternative txn_hash for per-object testing
   - `GREENFIELD_PUBLIC_TEST_OBJECT` - Pre-created public object for read tests
 - Added test execution instructions
 - Updated references to new documentation
@@ -173,8 +167,6 @@ Upload data → Receive ID/hash
 
 **Greenfield:**
 ```
-Step 1: CreateObject (on-chain) → Receive txn_hash
-Step 2: PutObject (upload) → Use txn_hash for authorization
 ```
 
 **Why?**
@@ -183,7 +175,6 @@ Step 2: PutObject (upload) → Use txn_hash for authorization
 - Ensures consistency between blockchain and storage
 
 **Current SDK Limitation:**
-The SDK requires you to obtain `txn_hash` externally (via DCellar or CLI) before uploading. Future versions should automate CreateObject.
 
 See [detailed explanation](greenfield_integration_guide.md#understanding-greenfields-two-step-upload-process).
 
@@ -203,7 +194,6 @@ See [detailed explanation](greenfield_integration_guide.md#understanding-greenfi
    # - GREENFIELD_SP_HOST
    # - GREENFIELD_BUCKET
    # - GREENFIELD_PRIVATE_KEY
-   # - GREENFIELD_TXN_HASH (optional - can be provided per-test)
    ```
 
 3. **Get Testnet Resources**:
@@ -286,7 +276,6 @@ docs/ref/agent0-py/
 
 **Recommended Reading Order**:
 1. **GREENFIELD_QUICKSTART.md** - Fast overview and basic setup
-2. **GREENFIELD_FAQ.md** - Understand txn_hash workflow and common questions
 3. **greenfield_integration_guide.md** - Detailed testnet setup
 4. **greenfield_usage_examples.md** - Production code patterns
 

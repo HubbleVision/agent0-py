@@ -71,7 +71,6 @@ pytest tests/test_greenfield_e2e.py -v -s --log-cli-level=DEBUG -m integration
 | 3 | Binary Data Integrity | All byte values (0x00-0xFF) | Binary data corruption handling |
 | 4 | Large Data Performance | 1MB file | Performance with larger payloads |
 | 5 | Multiple Objects | 3 concurrent objects | Transaction hash uniqueness |
-| 6 | Transaction Hash Uniqueness | 2 objects | Each upload gets unique txn_hash |
 | 7 | Error Handling | Invalid operations | Proper error handling |
 | 8 | Concurrent Operations | 5 simultaneous uploads | Performance under load |
 
@@ -185,7 +184,6 @@ TEST_DATA_EXAMPLES["large_data"] = b"X" * (100 * 1024)  # 100KB
 | Feature | Basic SDK | E2E AutoUploader |
 |----------|-------------|-------------------|
 | **CreateObject** | Manual (external) | Automatic |
-| **PutObject** | Requires txn_hash | Automatic |
 | **Workflow** | 2 steps (manual) | 1 step (automatic) |
 | **Gas Handling** | N/A | Automatic estimation |
 | **Error Handling** | Basic | Enhanced |
@@ -309,16 +307,12 @@ storage = GreenfieldReputationStorage(
     sp_host="gnfd-sp1.bnbchain.org",  # Mainnet
     bucket="production-bucket",
     private_key="production_private_key",
-    # txn_hash from your CreateObject batch
 )
 
 # Option 1: Pre-create transaction hashes
-txn_hash_pool = await batch_create_objects(count=1000)
 
 # Option 2: Create on-demand
 async def upload_with_auto_create(key: str, data: bytes) -> str:
-    txn_hash = await create_object_on_demand(key, len(data))
-    return storage.put(key=key, data=data, txn_hash=txn_hash)
 ```
 
 ### Cost Estimation

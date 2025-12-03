@@ -3,7 +3,7 @@
 改进的 BNB Greenfield E2E 测试
 
 这个改进版本提供了更好的错误处理和测试模式选择：
-1. 真实模式：使用真实的 Transaction Hash 进行完整测试
+1. 真实模式：全链路 CLI 自动 CreateObject + PutObject
 2. 模拟模式：模拟 Greenfield 响应，用于测试代码逻辑
 3. 混合模式：部分真实，部分模拟
 
@@ -84,7 +84,7 @@ class MockGreenfieldStorage:
         self.mock_data = {}
         self.success_rate = 1.0  # 100% 成功率
 
-    def put(self, key: str, data: bytes, txn_hash: Optional[str] = None) -> str:
+    def put(self, key: str, data: bytes) -> str:
         """模拟上传操作"""
         if key is None:
             key = self.real_storage._gen_key()
@@ -121,16 +121,10 @@ class ImprovedE2ETest:
         self.create_storage()
         # auto_uploader 延迟初始化（异步）
         self._auto_uploader_ready = False
-        # 允许使用静态对象键与映射好的 txn hash，便于复用同一批链上对象
+        # 允许使用静态对象键，便于复用同一批链上对象
         self.use_static_keys = os.getenv("GREENFIELD_STATIC_KEYS", "1") == "1"
         # 若明确要求 bypassSeal，则跳过封存等待
         self.bypass_seal = os.getenv("GREENFIELD_CLI_BYPASS_SEAL", "0") == "1"
-        txn_map_raw = os.getenv("GREENFIELD_TXN_HASH_MAP", "")
-        try:
-            self.txn_hash_map = json.loads(txn_map_raw) if txn_map_raw else {}
-        except json.JSONDecodeError:
-            print(f"⚠️ GREENFIELD_TXN_HASH_MAP 解析失败，忽略此映射")
-            self.txn_hash_map = {}
 
     def load_environment(self):
         """加载环境变量"""
@@ -154,7 +148,6 @@ class ImprovedE2ETest:
 
         # 可选字段
         optional_fields = [
-            "GREENFIELD_TXN_HASH",
             "GREENFIELD_CONTENT_TYPE",
             "GREENFIELD_TIMEOUT"
         ]
@@ -175,7 +168,6 @@ class ImprovedE2ETest:
         print(f"   Mode: {self.mode}")
         print(f"   Bucket: {self.config['GREENFIELD_BUCKET']}")
         print(f"   SP Host: {self.config['GREENFIELD_SP_HOST']}")
-        print(f"   Has Txn Hash: {'GREENFIELD_TXN_HASH' in self.config}")
 
     def create_storage(self):
         """创建存储实例"""
@@ -186,7 +178,6 @@ class ImprovedE2ETest:
                     sp_host=self.config["GREENFIELD_SP_HOST"],
                     bucket=self.config["GREENFIELD_BUCKET"],
                     private_key=self.config["GREENFIELD_PRIVATE_KEY"],
-                    txn_hash=self.config.get("GREENFIELD_TXN_HASH"),
                     content_type=self.config.get("GREENFIELD_CONTENT_TYPE", "application/octet-stream"),
                     timeout=self.config.get("GREENFIELD_TIMEOUT", 30)
                 )
@@ -194,16 +185,10 @@ class ImprovedE2ETest:
                 print(f"✅ 模拟存储创建成功")
 
             elif self.mode == "real":
-                if "GREENFIELD_TXN_HASH" not in self.config:
-                    print(f"❌ 真实模式需要 GREENFIELD_TXN_HASH")
-                    print(f"💡 请运行: python scripts/setup_greenfield_test.py")
-                    sys.exit(1)
-
                 self.storage = GreenfieldReputationStorage(
                     sp_host=self.config["GREENFIELD_SP_HOST"],
                     bucket=self.config["GREENFIELD_BUCKET"],
                     private_key=self.config["GREENFIELD_PRIVATE_KEY"],
-                    txn_hash=self.config["GREENFIELD_TXN_HASH"],
                     content_type=self.config.get("GREENFIELD_CONTENT_TYPE", "application/octet-stream"),
                     timeout=self.config.get("GREENFIELD_TIMEOUT", 30)
                 )
@@ -211,16 +196,10 @@ class ImprovedE2ETest:
 
             elif self.mode == "hybrid":
                 # 混合模式：真实存储，但允许一些失败的测试
-                if "GREENFIELD_TXN_HASH" not in self.config:
-                    print(f"⚠️ 混合模式缺少 GREENFIELD_TXN_HASH，降级到模拟模式")
-                    self.mode = "mock"
-                    return self.create_storage()
-
                 self.storage = GreenfieldReputationStorage(
                     sp_host=self.config["GREENFIELD_SP_HOST"],
                     bucket=self.config["GREENFIELD_BUCKET"],
                     private_key=self.config["GREENFIELD_PRIVATE_KEY"],
-                    txn_hash=self.config["GREENFIELD_TXN_HASH"],
                     content_type=self.config.get("GREENFIELD_CONTENT_TYPE", "application/octet-stream"),
                     timeout=self.config.get("GREENFIELD_TIMEOUT", 30)
                 )
@@ -268,7 +247,7 @@ class ImprovedE2ETest:
             # 自动助手存在时，为避免静态键已存在，禁用静态键复用
             self.use_static_keys = False
         except Exception as e:
-            print(f"⚠️ 无法初始化自动助手，继续使用预置 txn_hash: {e}")
+            print(f"⚠️ 无法初始化自动助手，将继续直接使用 storage: {e}")
             self.auto_uploader = None
 
         self._auto_uploader_ready = True
@@ -310,17 +289,14 @@ class ImprovedE2ETest:
                 # 避免已有对象导致冲突，附加时间戳
                 object_key = f"{object_key}-{int(time.time())}"
 
-            txn_hash_override = self.txn_hash_map.get(object_key)
-
-            # 真实模式优先尝试自动 CreateObject，失败则回退到显式 txn_hash
             if self.mode == "real" and self.auto_uploader:
                 try:
                     object_key = await self.auto_uploader.put_auto(key=object_key, data=data)
                 except Exception as auto_err:
-                    print(f"⚠️ 自动 CreateObject 失败，改用显式 txn_hash: {auto_err}")
-                    object_key = self.storage.put(object_key, data, txn_hash=txn_hash_override)
+                    print(f"⚠️ 自动 CreateObject 失败，直接使用 storage.put: {auto_err}")
+                    object_key = self.storage.put(object_key, data)
             else:
-                object_key = self.storage.put(object_key, data, txn_hash=txn_hash_override)
+                object_key = self.storage.put(object_key, data)
             upload_time = time.time() - start_time
 
             print(f"✅ 上传成功:")
@@ -402,28 +378,6 @@ class ImprovedE2ETest:
             except RuntimeError as e:
                 print(f"✅ 正确抛出异常: {type(e).__name__}")
 
-            # 测试签名功能（仅对真实存储）
-            if hasattr(self.storage, '_build_authorization'):
-                print("   测试签名功能...")
-                test_headers = {
-                    "Content-Type": "application/octet-stream",
-                    "Content-Length": "100",
-                    "X-Gnfd-Txn-Hash": self.config.get("GREENFIELD_TXN_HASH", "0xtest"),
-                    "X-Gnfd-Expiry-Timestamp": "2024-12-31T23:59:59Z"
-                }
-
-                try:
-                    auth_header = self.storage._build_authorization(
-                        method="PUT",
-                        path="/test-object",
-                        headers=test_headers,
-                        body=b"test data"
-                    )
-                    print(f"✅ 签名构建成功: {auth_header[:50]}...")
-                except Exception as e:
-                    print(f"❌ 签名构建失败: {e}")
-                    return False
-
             print(f"✅ 错误处理测试通过")
             return True
 
@@ -451,7 +405,6 @@ class ImprovedE2ETest:
                 # 上传性能测试
                 start_time = time.time()
                 object_key = perf_key if self.use_static_keys else None
-                txn_hash_override = self.txn_hash_map.get(object_key) if object_key else None
                 if self.mode == "real" and self.auto_uploader:
                     try:
                         object_key = await self.auto_uploader.put_auto(
@@ -459,10 +412,10 @@ class ImprovedE2ETest:
                             data=data
                         )
                     except Exception as auto_err:
-                        print(f"⚠️ 自动 CreateObject 失败（性能测试，使用 txn_hash 回退）: {auto_err}")
-                        object_key = self.storage.put(object_key, data, txn_hash=txn_hash_override)
+                        print(f"⚠️ 自动 CreateObject 失败（性能测试，直接调用 storage.put）: {auto_err}")
+                        object_key = self.storage.put(object_key or self.storage._gen_key(), data)
                 else:
-                    object_key = self.storage.put(object_key, data, txn_hash=txn_hash_override)
+                    object_key = self.storage.put(object_key or self.storage._gen_key(), data)
                 upload_time = time.time() - start_time
 
                 # 等待对象可读

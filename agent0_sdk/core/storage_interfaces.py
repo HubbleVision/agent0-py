@@ -6,7 +6,7 @@ allowing multiple implementations (IPFS, Greenfield, etc.) to be swapped transpa
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class ReputationStorage(ABC):
@@ -18,15 +18,12 @@ class ReputationStorage(ABC):
     """
 
     @abstractmethod
-    def put(self, key: str, data: bytes, txn_hash: Optional[str] = None) -> str:
+    def put(self, key: str, data: bytes) -> str:
         """Store data and return a unique identifier.
 
         Args:
             key: Unique key for the data (can be empty string for auto-generation)
             data: Binary data to store
-            txn_hash: Optional transaction hash for Greenfield CreateObject operation.
-                     Required for Greenfield, ignored for IPFS.
-                     If not provided, uses the default from constructor (if available).
 
         Returns:
             Unique identifier (CID for IPFS, object key for Greenfield)
@@ -49,14 +46,12 @@ class ReputationStorage(ABC):
         pass
 
     @abstractmethod
-    def put_json(self, key: str, data: Dict[str, Any], txn_hash: Optional[str] = None) -> str:
+    def put_json(self, key: str, data: Dict[str, Any]) -> str:
         """Store JSON data and return a unique identifier.
 
         Args:
             key: Unique key for the data (can be empty string for auto-generation)
             data: Dictionary to store as JSON
-            txn_hash: Optional transaction hash for Greenfield CreateObject operation.
-                     Required for Greenfield, ignored for IPFS.
 
         Returns:
             Unique identifier (CID for IPFS, object key for Greenfield)

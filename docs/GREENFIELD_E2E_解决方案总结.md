@@ -91,7 +91,6 @@ uv run python scripts/setup_greenfield_test.py
 **更新配置**：
 ```bash
 # 将真实的 Transaction Hash 添加到 .env 文件
-GREENFIELD_TXN_HASH=0xREAL_TRANSACTION_HASH_HERE
 ```
 
 **运行真实测试**：
@@ -166,7 +165,6 @@ uv run python tests/run_greenfield_e2e_improved.py --mode real --test-type all
 - [ ] `GREENFIELD_SP_HOST=gnfd-testnet-sp1.bnbchain.org`
 - [ ] `GREENFIELD_BUCKET=hubble-reputation-test`
 - [ ] `GREENFIELD_PRIVATE_KEY=0x...`（64 位十六进制）
-- [ ] `GREENFIELD_TXN_HASH=0x...`（真实 Hash，仅真实模式需要）
 
 ### 测试命令清单 ✅
 - [ ] 基础验证：`python tests/test_greenfield_basic.py`

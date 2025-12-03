@@ -83,7 +83,6 @@ def create_reputation_storage(
         sp_host = cfg.get("GREENFIELD_SP_HOST") or os.getenv("GREENFIELD_SP_HOST")
         bucket = cfg.get("GREENFIELD_BUCKET") or os.getenv("GREENFIELD_BUCKET")
         private_key = cfg.get("GREENFIELD_PRIVATE_KEY") or os.getenv("GREENFIELD_PRIVATE_KEY")
-        txn_hash = cfg.get("GREENFIELD_TXN_HASH") or os.getenv("GREENFIELD_TXN_HASH")
         content_type = cfg.get("GREENFIELD_CONTENT_TYPE") or os.getenv("GREENFIELD_CONTENT_TYPE", "application/octet-stream")
         timeout = int(cfg.get("GREENFIELD_TIMEOUT") or os.getenv("GREENFIELD_TIMEOUT", "30"))
         greenfield_rpc_url = cfg.get("GREENFIELD_RPC_URL") or os.getenv("GREENFIELD_RPC_URL") or "https://gnfd-testnet-fullnode-tendermint-us.bnbchain.org:443"
@@ -139,7 +138,6 @@ def create_reputation_storage(
             sp_host=sp_host,
             bucket=bucket,
             private_key=private_key,
-            txn_hash=txn_hash,
             content_type=content_type,
             timeout=timeout,
             create_object_helper=create_object_helper,

@@ -37,7 +37,6 @@ class GreenfieldReputationStorage(ReputationStorage):
         sp_host: str,
         bucket: str,
         private_key: str,
-        txn_hash: Optional[str] = None,  # 保留兼容参数但不再使用
         content_type: str = "application/octet-stream",
         timeout: int = 30,
         create_object_helper: Optional[Any] = None,
@@ -59,18 +58,13 @@ class GreenfieldReputationStorage(ReputationStorage):
             bucket=bucket,
             private_key=private_key,
         )
-
-        if txn_hash:
-            logger.warning("CLI-only 模式忽略 txn_hash（仅保留兼容参数）")
+        self.account = getattr(self._create_object_helper, "account", None)
 
         logger.info("Initialized Greenfield CLI-only storage: bucket=%s, sp_host=%s", bucket, sp_host)
 
-    def put(self, key: str, data: bytes, txn_hash: Optional[str] = None) -> str:
+    def put(self, key: str, data: bytes) -> str:
         """仅通过 gnfd-cmd 上传并返回对象 key。"""
         object_key = key.strip() if key else self._gen_key()
-
-        if txn_hash:
-            logger.warning("CLI-only 模式忽略 txn_hash 参数")
 
         txn_created = self._create_object_helper.upload_via_cli(
             object_name=object_key,
@@ -122,19 +116,18 @@ class GreenfieldReputationStorage(ReputationStorage):
     def _gen_key(self) -> str:
         return uuid.uuid4().hex
 
-    def put_json(self, key: str, data: Dict[str, Any], txn_hash: Optional[str] = None) -> str:
+    def put_json(self, key: str, data: Dict[str, Any]) -> str:
         """Store JSON data on Greenfield and return object key.
 
         Args:
             key: Object key/name (if empty, auto-generates UUID-based key)
             data: Dictionary to store as JSON
-            txn_hash: Optional transaction hash from CreateObject operation
 
         Returns:
             Object key (name) that can be used to retrieve the data
         """
         json_bytes = json.dumps(data, sort_keys=True, ensure_ascii=False).encode('utf-8')
-        return self.put(key=key, data=json_bytes, txn_hash=txn_hash)
+        return self.put(key=key, data=json_bytes)
 
     def get_json(self, key: str) -> Dict[str, Any]:
         """Retrieve JSON data from Greenfield by object key.

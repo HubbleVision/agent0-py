@@ -9,9 +9,7 @@ Phase 1：接口抽象与 IPFS 适配（最小改动）✅
   - [x] 工厂在无配置时返回 IPFS，实现默认行为。
 
 Phase 2：Greenfield 实现（HTTP PutObject/GetObject）✅
-- [x] 新增 `greenfield_storage.py`，注入 `sp_host/bucket/private_key/txn_hash`，构造 Authorization 头并执行 PUT/GET。
 - [x] 补全 `_build_authorization` 签名逻辑，符合官方 README（canonical request + Txn Hash）。
-- [x] 配置加载：支持 `GREENFIELD_SP_HOST`、`GREENFIELD_BUCKET`、`GREENFIELD_PRIVATE_KEY`、`GREENFIELD_TXN_HASH`、可选 content-type。
 - [x] 单元测试：
   - [x] 使用 requests-mock/monkeypatch，验证 URL 形态为 `https://{bucket}.{sp_host}/{object}`，Header 带 `X-Gnfd-Txn-Hash`、Authorization 被调用。
   - [x] `_gen_key` 为空 key 时生成非空键。
@@ -28,7 +26,6 @@ Phase 4：集成验证 ✅
 - [x] 创建集成测试文件 `tests/test_greenfield_integration.py`，包含：
   - [x] 真实 Greenfield 测试网连接测试（PUT/GET roundtrip）
   - [x] 自动生成 key 测试
-  - [x] Per-object txn_hash 测试
   - [x] 大文件上传测试（1MB）
   - [x] 二进制数据完整性测试
   - [x] 错误处理测试（不存在的对象）

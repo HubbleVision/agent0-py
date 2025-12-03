@@ -72,7 +72,6 @@ pytest tests/test_greenfield_e2e.py -v -s --log-cli-level=DEBUG -m integration
 | 3 | 二进制数据完整性 | 所有字节值 (0x00-0xFF) | 二进制数据损坏处理 |
 | 4 | 大数据性能 | 1MB 文件 | 较大载荷的性能 |
 | 5 | 多对象工作流 | 3 个并发对象 | 事务哈希唯一性 |
-| 6 | 事务哈希唯一性 | 2 个对象 | 每次上传获得唯一 txn_hash |
 | 7 | 错误处理 | 无效操作 | 正确错误处理 |
 | 8 | 并发操作 | 5 个同时上传 | 负载下的性能 |
 
@@ -180,7 +179,6 @@ TEST_DATA_EXAMPLES["large_data"] = b"X" * (100 * 1024)  # 100KB
 | 功能 | 基础 SDK | E2E 自动上传器 |
 |----------|-------------|-------------------|
 | **CreateObject** | 手动（外部） | 自动 |
-| **PutObject** | 需要 txn_hash | 自动 |
 | **工作流** | 2 步骤（手动） | 1 步骤（自动） |
 | **燃气处理** | 不可用 | 自动估算 |
 | **错误处理** | 基础 | 增强 |
@@ -305,20 +303,14 @@ storage = GreenfieldReputationStorage(
     bucket="production-bucket",
     private_key="production_private_key",
     # 来自你的 CreateObject 批处理
-    txn_hash="0x..."
 )
 
 # 选项 1：预创建事务哈希
-txn_hash_pool = await batch_create_objects(count=1000)
 
 def upload_with_auto_create(key: str, data: bytes) -> str:
-    txn_hash = txn_hash_pool.pop()  # 获取下一个可用的
-    return storage.put(key=key, data=data, txn_hash=txn_hash)
 
 # 选项 2：按需创建
 async def upload_with_auto_create(key: str, data: bytes) -> str:
-    txn_hash = await create_object_on_demand(key, len(data))
-    return storage.put(key=key, data=data, txn_hash=txn_hash)
 ```
 
 ### 成本估算

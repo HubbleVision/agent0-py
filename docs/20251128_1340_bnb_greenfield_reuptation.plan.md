@@ -14,7 +14,6 @@ BNB Greenfield 声誉存储改造方案（ERC8004）
 
 配置方案
 - 新增：`REPUTATION_BACKEND`（默认 ipfs）。
-- Greenfield：`GREENFIELD_BUCKET`、`GREENFIELD_PRIVATE_KEY`（或 keystore+pass）、`GREENFIELD_SP_HOST`（如 gnfd-testnet-spX.bnbchain.org）、`GREENFIELD_TXN_HASH`（CreateObject 返回的 Txn Hash，用于 PutObject）。如需链上查询，可额外提供 `GREENFIELD_ENDPOINT`/`GREENFIELD_CHAIN_ID`（可选）。
 - IPFS：沿用现有 `IPFS_API_URL`、`IPFS_GATEWAY_URL`、`IPFS_PROJECT_ID/SECRET` 等，不变。
 
 Greenfield 主要功能与文档入口
@@ -31,7 +30,6 @@ Greenfield 主要功能与文档入口
 - 不依赖跨链镜像、ACL 高阶能力或支付模块的额外特性；如需访问控制，可后续结合 ACL/策略接口。
 
 环境与密钥
-- 测试网 vs 主网：测试网有独立的 chainId、SP 域名（如 `gnfd-testnet-sp*.bnbchain.org`）、RPC/全节点与水龙头；主网使用主网 SP 域名与链参数。配置项隔离即可无缝切换：更换 `GREENFIELD_SP_HOST`、`GREENFIELD_CHAIN_ID`、`GREENFIELD_ENDPOINT`、`GREENFIELD_BUCKET`、`GREENFIELD_TXN_HASH`（需重新在目标网络执行 CreateObject 获取）。
 - 开发/测试：可在测试网创建 bucket/object 并获取 Txn Hash，验证读写；上线前需在主网重新创建 bucket 与对象（测试网数据不会自动迁移）。
 - 获取密钥：
   - 使用 EVM 钱包生成私钥/keystore（如 MetaMask 导出私钥或 keystore 文件）。
@@ -60,7 +58,6 @@ Greenfield 主要功能与文档入口
 实现步骤（最小改动路径）
 1) 定义接口：新增 `interfaces.py`（或在现有模块中）声明 `ReputationStorage` 抽象类。
 2) 适配 IPFS：在现 IPFS 客户端文件中实现接口，方法名对齐 `put/get`，内部逻辑保持不变。
-3) 新增 Greenfield 实现：`greenfield_storage.py` 内注入 `sp_host`、`bucket`、`private_key`、`txn_hash`，构造 Authorization 头并调用 `PUT https://{bucket}.{sp_host}/{object}`；object key 可用现有哈希/CID 兼容。
 4) 工厂与装配：新增/修改工厂函数（如 `create_reputation_storage(config)`），在唯一注入点替换为工厂返回值；若有依赖注入容器，增加绑定。
 5) 配置与文档：新增环境变量说明；保持默认 IPFS，日志打印当前后端。
 6) 测试：补充接口单测（stub IPFS/Greenfield 客户端）；集成测试在测试 bucket 上跑一次上传/下载；验证切换后业务逻辑不变。
@@ -111,11 +108,9 @@ import requests
 from eth_account import Account
 
 class GreenfieldReputationStorage(ReputationStorage):
-    def __init__(self, sp_host, bucket, private_key, txn_hash, content_type="application/octet-stream"):
         self.bucket = bucket
         self.sp_host = sp_host  # 例如 gnfd-testnet-spX.bnbchain.org
         self.account = Account.from_key(private_key)
-        self.txn_hash = txn_hash  # 链上 CreateObject 得到的 Txn Hash，用于 PutObject 头
         self.content_type = content_type
         self.session = requests.Session()
 
@@ -124,7 +119,6 @@ class GreenfieldReputationStorage(ReputationStorage):
         url = f"https://{self.bucket}.{self.sp_host}/{object_key}"  # virtual-hosted-style
         headers = {
             "Authorization": self._build_authorization(url, data),  # 按 README 的签名格式
-            "X-Gnfd-Txn-Hash": self.txn_hash,
             "Content-Type": self.content_type,
             "Content-Length": str(len(data)),
         }
@@ -161,7 +155,6 @@ def create_reputation_storage(config=None) -> ReputationStorage:
             sp_host=cfg.get("GREENFIELD_SP_HOST") or os.getenv("GREENFIELD_SP_HOST"),
             bucket=cfg.get("GREENFIELD_BUCKET") or os.getenv("GREENFIELD_BUCKET"),
             private_key=cfg.get("GREENFIELD_PRIVATE_KEY") or os.getenv("GREENFIELD_PRIVATE_KEY"),
-            txn_hash=cfg.get("GREENFIELD_TXN_HASH") or os.getenv("GREENFIELD_TXN_HASH"),
             # content_type 可选，默认 application/octet-stream
         )
     return IpfsReputationStorage(
@@ -180,5 +173,4 @@ export REPUTATION_BACKEND=greenfield
 export GREENFIELD_BUCKET=hubble-reputation
 export GREENFIELD_PRIVATE_KEY=0x...
 export GREENFIELD_SP_HOST=gnfd-testnet-spX.bnbchain.org
-export GREENFIELD_TXN_HASH=0x...   # CreateObject 得到的 Txn Hash
 ```

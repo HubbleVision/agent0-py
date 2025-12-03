@@ -228,9 +228,7 @@ class FeedbackManager:
                 feedbackHash = self.web3_client.keccak256(feedback_bytes)
 
                 # Store using content_storage (supports both IPFS and Greenfield)
-                # Get txn_hash from environment if available (for Greenfield)
-                txn_hash = os.getenv("GREENFIELD_TXN_HASH")
-                key = self.content_storage.put(key="", data=feedback_bytes, txn_hash=txn_hash)
+                key = self.content_storage.put(key="", data=feedback_bytes)
 
                 # Build URI using storage backend
                 feedbackUri = self.content_storage.build_uri(key)
