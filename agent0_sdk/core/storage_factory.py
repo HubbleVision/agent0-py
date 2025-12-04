@@ -33,12 +33,24 @@ def _import_greenfield_storage():
 
 def _default_greenfield_cli_template() -> Optional[str]:
     """提供一个默认的 gnfd-cmd 模板，未配置时使用。"""
-    repo_root = Path(__file__).resolve().parents[3]
     bin_name = "gnfd-cmd_mac" if platform.system().lower() == "darwin" else "gnfd-cmd"
-    cli_path = repo_root / "bin" / bin_name
-    if not cli_path.exists():
-        return None
-    return f"{cli_path} object put --contentType {{content_type}} {{file}} gnfd://{{bucket}}/{{object}}"
+
+    candidate_paths = [
+        # Runtime container path (copied in Dockerfile runtime stage)
+        Path("/app/docs/ref/agent0-py/bin") / bin_name,
+        # Package-relative paths
+        Path(__file__).resolve().parent.parent / "bin" / bin_name,  # agent0_sdk/bin
+        Path(__file__).resolve().parents[2] / "bin" / bin_name,     # site-packages/.../bin
+    ]
+
+    for cli_path in candidate_paths:
+        if cli_path.exists():
+            return (
+                f"{cli_path} object put --contentType {{content_type}} "
+                f"{{file}} gnfd://{{bucket}}/{{object}}"
+            )
+
+    return None
 
 
 def create_reputation_storage(
@@ -107,7 +119,10 @@ def create_reputation_storage(
             raise ValueError("GREENFIELD_PRIVATE_KEY is required when using Greenfield backend")
 
         if not create_object_template:
-            raise ValueError("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE is required (CLI-only Greenfield).")
+            raise ValueError(
+                "GNFD CLI binary not found. Please set GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE "
+                "or ensure /app/docs/ref/agent0-py/bin/gnfd-cmd is present in the container."
+            )
 
         # If running inside Linux container but template points to mac binary, try swapping to gnfd-cmd
         if "gnfd-cmd_mac" in create_object_template and platform.system().lower() == "linux":
@@ -118,21 +133,18 @@ def create_reputation_storage(
             else:
                 raise ValueError(f"gnfd-cmd not found for Linux runtime: {create_object_template}")
 
-        try:
-            from .greenfield_cli import GreenfieldCreateObjectHelper
+        from .greenfield_cli import GreenfieldCreateObjectHelper
 
-            create_object_helper = GreenfieldCreateObjectHelper(
-                rpc_url=greenfield_rpc_url,
-                sp_host=sp_host,
-                bucket_name=bucket,
-                private_key=private_key,
-                chain_id=greenfield_chain_id,
-                cli_chain_id=cli_chain_id,
-                cli_template=create_object_template,
-            )
-            logger.info("Greenfield CLI helper enabled for uploads")
-        except Exception as helper_exc:
-            raise ValueError(f"初始化 Greenfield CLI helper 失败：{helper_exc}") from helper_exc
+        create_object_helper = GreenfieldCreateObjectHelper(
+            rpc_url=greenfield_rpc_url,
+            sp_host=sp_host,
+            bucket_name=bucket,
+            private_key=private_key,
+            chain_id=greenfield_chain_id,
+            cli_chain_id=cli_chain_id,
+            cli_template=create_object_template,
+        )
+        logger.info("Greenfield CLI helper enabled for uploads")
 
         storage = GreenfieldReputationStorage(
             sp_host=sp_host,
