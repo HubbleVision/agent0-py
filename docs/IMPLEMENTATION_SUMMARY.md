@@ -177,7 +177,6 @@ host;x-gnfd-expiry-timestamp;x-gnfd-txn-hash
 | `GREENFIELD_SP_HOST` | SP 端点 | 是* | - |
 | `GREENFIELD_BUCKET` | 存储桶名称 | 是* | - |
 | `GREENFIELD_PRIVATE_KEY` | 私钥 | 是* | - |
-| `GREENFIELD_TXN_HASH` | 交易哈希 | 是* | - |
 | `GREENFIELD_CONTENT_TYPE` | 内容类型 | 否 | `application/octet-stream` |
 | `GREENFIELD_TIMEOUT` | 超时时间（秒） | 否 | `30` |
 
@@ -231,7 +230,6 @@ https://my-bucket.gnfd-testnet-sp1.bnbchain.org/feedback-abc123
 - ✅ put() 上传到 Greenfield（URL 格式）
 - ✅ put() 生成 UUID key（空 key 时）
 - ✅ get() 从 Greenfield 检索数据
-- ✅ 参数验证（sp_host, bucket, private_key, txn_hash）
 - ✅ Canonical Request 构建
 - ✅ Authorization 签名格式验证
 
@@ -258,7 +256,6 @@ config = {
     "GREENFIELD_SP_HOST": "gnfd-testnet-sp1.bnbchain.org",
     "GREENFIELD_BUCKET": "my-bucket",
     "GREENFIELD_PRIVATE_KEY": "0x...",
-    "GREENFIELD_TXN_HASH": "0x...",
 }
 storage = create_reputation_storage(config=config)
 
@@ -344,7 +341,6 @@ export REPUTATION_BACKEND=greenfield
 export GREENFIELD_SP_HOST=gnfd-testnet-sp1.bnbchain.org
 export GREENFIELD_BUCKET=test-reputation
 export GREENFIELD_PRIVATE_KEY=0x...  # 测试网私钥
-export GREENFIELD_TXN_HASH=0x...     # 测试网 txn hash
 ```
 
 ### 生产环境
@@ -354,7 +350,6 @@ export GREENFIELD_SP_HOST=gnfd-sp1.bnbchain.org
 export GREENFIELD_BUCKET=prod-reputation
 # 使用 Secret Manager 注入:
 # GREENFIELD_PRIVATE_KEY
-# GREENFIELD_TXN_HASH
 ```
 
 ## 贡献者

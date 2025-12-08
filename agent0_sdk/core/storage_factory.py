@@ -9,6 +9,7 @@ IPFS, BNB Greenfield, and future storage implementations.
 import logging
 import os
 import platform
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .ipfs_client import IPFSClient
@@ -30,6 +31,28 @@ def _import_greenfield_storage():
         ) from e
 
 
+def _default_greenfield_cli_template() -> Optional[str]:
+    """提供一个默认的 gnfd-cmd 模板，未配置时使用。"""
+    bin_name = "gnfd-cmd_mac" if platform.system().lower() == "darwin" else "gnfd-cmd"
+
+    candidate_paths = [
+        # Runtime container path (copied in Dockerfile runtime stage)
+        Path("/app/docs/ref/agent0-py/bin") / bin_name,
+        # Package-relative paths
+        Path(__file__).resolve().parent.parent / "bin" / bin_name,  # agent0_sdk/bin
+        Path(__file__).resolve().parents[2] / "bin" / bin_name,     # site-packages/.../bin
+    ]
+
+    for cli_path in candidate_paths:
+        if cli_path.exists():
+            return (
+                f"{cli_path} object put --contentType {{content_type}} "
+                f"{{file}} gnfd://{{bucket}}/{{object}}"
+            )
+
+    return None
+
+
 def create_reputation_storage(
     config: Optional[Dict[str, Any]] = None,
     ipfs_client: Optional[IPFSClient] = None
@@ -45,11 +68,11 @@ def create_reputation_storage(
                 Expected keys:
                 - REPUTATION_BACKEND: "ipfs" (default) or "greenfield"
                 - For IPFS: uses ipfs_client parameter or creates from config
-                - For Greenfield (Phase 2):
+                - For Greenfield (CLI only):
                   - GREENFIELD_SP_HOST: SP endpoint (e.g., gnfd-testnet-sp1.bnbchain.org)
                   - GREENFIELD_BUCKET: Bucket name
                   - GREENFIELD_PRIVATE_KEY: Private key for signing
-                  - GREENFIELD_TXN_HASH: Transaction hash from CreateObject
+                  - GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE: Optional; defaults to bundled gnfd-cmd template
         ipfs_client: Pre-initialized IPFSClient instance (optional).
                      If provided and backend is IPFS, this client will be used.
 
@@ -72,7 +95,6 @@ def create_reputation_storage(
         sp_host = cfg.get("GREENFIELD_SP_HOST") or os.getenv("GREENFIELD_SP_HOST")
         bucket = cfg.get("GREENFIELD_BUCKET") or os.getenv("GREENFIELD_BUCKET")
         private_key = cfg.get("GREENFIELD_PRIVATE_KEY") or os.getenv("GREENFIELD_PRIVATE_KEY")
-        txn_hash = cfg.get("GREENFIELD_TXN_HASH") or os.getenv("GREENFIELD_TXN_HASH")
         content_type = cfg.get("GREENFIELD_CONTENT_TYPE") or os.getenv("GREENFIELD_CONTENT_TYPE", "application/octet-stream")
         timeout = int(cfg.get("GREENFIELD_TIMEOUT") or os.getenv("GREENFIELD_TIMEOUT", "30"))
         greenfield_rpc_url = cfg.get("GREENFIELD_RPC_URL") or os.getenv("GREENFIELD_RPC_URL") or "https://gnfd-testnet-fullnode-tendermint-us.bnbchain.org:443"
@@ -82,7 +104,11 @@ def create_reputation_storage(
         except Exception:
             greenfield_chain_id = 5600
         cli_chain_id = cfg.get("GREENFIELD_CLI_CHAIN_ID") or os.getenv("GREENFIELD_CLI_CHAIN_ID")
-        create_object_template = cfg.get("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE") or os.getenv("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE")
+        create_object_template = (
+            cfg.get("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE")
+            or os.getenv("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE")
+            or _default_greenfield_cli_template()
+        )
 
         # Validate required parameters
         if not sp_host:
@@ -92,49 +118,38 @@ def create_reputation_storage(
         if not private_key:
             raise ValueError("GREENFIELD_PRIVATE_KEY is required when using Greenfield backend")
 
-        # txn_hash is optional (can be provided per-object in put() calls)
-        if not txn_hash:
-            logger.warning(
-                "GREENFIELD_TXN_HASH not provided as default. "
-                "You must provide txn_hash for each put() call. "
-                "This should be the transaction hash from CreateObject operation."
+        if not create_object_template:
+            raise ValueError(
+                "GNFD CLI binary not found. Please set GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE "
+                "or ensure /app/docs/ref/agent0-py/bin/gnfd-cmd is present in the container."
             )
 
-        create_object_helper = None
-        if create_object_template:
-            # If running inside Linux container but template points to mac binary, try swapping to gnfd-cmd
-            if "gnfd-cmd_mac" in create_object_template and platform.system().lower() == "linux":
-                adjusted = create_object_template.replace("gnfd-cmd_mac", "gnfd-cmd")
-                if os.path.exists(adjusted.split()[0]):
-                    logger.info("Adjusted Greenfield CLI template for Linux: %s", adjusted)
-                    create_object_template = adjusted
-                else:
-                    logger.warning("Linux runtime detected but gnfd-cmd not found; template may fail: %s", create_object_template)
+        # If running inside Linux container but template points to mac binary, try swapping to gnfd-cmd
+        if "gnfd-cmd_mac" in create_object_template and platform.system().lower() == "linux":
+            adjusted = create_object_template.replace("gnfd-cmd_mac", "gnfd-cmd")
+            if os.path.exists(adjusted.split()[0]):
+                logger.info("Adjusted Greenfield CLI template for Linux: %s", adjusted)
+                create_object_template = adjusted
+            else:
+                raise ValueError(f"gnfd-cmd not found for Linux runtime: {create_object_template}")
 
-            try:
-                from .greenfield_cli import GreenfieldCreateObjectHelper
+        from .greenfield_cli import GreenfieldCreateObjectHelper
 
-                create_object_helper = GreenfieldCreateObjectHelper(
-                    rpc_url=greenfield_rpc_url,
-                    sp_host=sp_host,
-                    bucket_name=bucket,
-                    private_key=private_key,
-                    chain_id=greenfield_chain_id,
-                    cli_chain_id=cli_chain_id,
-                    cli_template=create_object_template,
-                )
-                logger.info("Greenfield CLI helper enabled for uploads")
-            except Exception as helper_exc:  # pragma: no cover - defensive branch
-                logger.warning(
-                    "Failed to initialize Greenfield CLI helper, will fallback to HTTP uploads: %s",
-                    helper_exc,
-                )
+        create_object_helper = GreenfieldCreateObjectHelper(
+            rpc_url=greenfield_rpc_url,
+            sp_host=sp_host,
+            bucket_name=bucket,
+            private_key=private_key,
+            chain_id=greenfield_chain_id,
+            cli_chain_id=cli_chain_id,
+            cli_template=create_object_template,
+        )
+        logger.info("Greenfield CLI helper enabled for uploads")
 
         storage = GreenfieldReputationStorage(
             sp_host=sp_host,
             bucket=bucket,
             private_key=private_key,
-            txn_hash=txn_hash,
             content_type=content_type,
             timeout=timeout,
             create_object_helper=create_object_helper,

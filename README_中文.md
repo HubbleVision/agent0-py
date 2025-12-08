@@ -1,10 +1,110 @@
-# Agent0 SDK - BNB Greenfield 声誉存储
+# Agent0 SDK - BNB 链支持与 Greenfield 声誉存储
 
 > 🎉 完整的中文版文档和端到端测试系统
 
 ## 📋 概述
 
-本项目为 agent0 SDK 添加了完整的 BNB Greenfield 存储支持，包括从基础的 IPFS 存储到自动化的端到端测试。
+本项目为 agent0 SDK 添加了完整的 BNB 生态支持:
+- ✅ **BNB 链支持**: 支持 BNB 测试网 (Chain ID 97) 和 BNB 主网 (Chain ID 56) 的 ERC-8004 智能合约
+- ✅ **Greenfield 存储**: 完整的 BNB Greenfield 分布式存储支持
+- ✅ **统一接口**: 从基础的 IPFS 存储到自动化的端到端测试
+
+## 🌐 支持的区块链网络
+
+| 区块链 | Chain ID | 状态 | 默认合约 |
+|-------|----------|------|---------|
+| Ethereum Sepolia | 11155111 | ✅ 已激活 | 是 |
+| Base Sepolia | 84532 | ✅ 已激活 | 是 |
+| Polygon Amoy | 80002 | ✅ 已激活 | 是 |
+| Linea Sepolia | 59141 | ✅ 已激活 | 是 |
+| **BNB 测试网** | **97** | **✅ 已激活** | **是** |
+| **BNB 主网** | **56** | **🚧 即将上线** | **待部署** |
+
+### 使用 BNB 链
+
+**默认合约已内置** - 只需指定 `chainId` 即可开始使用!
+
+```python
+from agent0_sdk import SDK
+
+# BNB 测试网 - 默认合约已配置好!
+sdk = SDK(
+    chainId=97,  # 这就够了 - SDK 会自动处理其他配置
+    rpcUrl="https://data-seed-prebsc-1-s1.bnbchain.org:8545",
+    signer="0xYOUR_PRIVATE_KEY"
+)
+
+# 在 BNB 测试网上注册代理
+agent = sdk.createAgent(
+    name="我的 BNB 代理",
+    description="运行在 BNB 链上的 AI 代理"
+)
+agent.registerIPFS()  # 需要 IPFS 配置 (pinata 等)
+print(f"代理已在 BNB 测试网注册: {agent.agentId}")  # 例如: "97:1"
+
+# BNB 主网（上线后可用）
+sdk_mainnet = SDK(
+    chainId=56,
+    rpcUrl="https://bsc-dataseed.binance.org/",
+    signer="0xYOUR_PRIVATE_KEY"
+)
+```
+
+**测试自定义合约**（可选 - 高级用户使用）:
+
+```python
+# 方式 1: 使用环境变量（在 .env 中设置）
+# BNB_TESTNET_IDENTITY=0xYourCustomContract
+sdk = SDK(chainId=97, rpcUrl="...", signer="...")
+
+# 方式 2: 使用 registryOverrides 参数
+sdk = SDK(
+    chainId=97,
+    rpcUrl="...",
+    signer="...",
+    registryOverrides={
+        97: {
+            "IDENTITY": "0xYourTestContract",
+            "REPUTATION": "0xYourTestContract2",
+            "VALIDATION": "0xYourTestContract3"
+        }
+    }
+)
+```
+
+**获取测试网 BNB:**
+- 访问 [BNB 测试网水龙头](https://testnet.bnbchain.org/faucet-smart)
+- 连接钱包并申请测试网 BNB 代币
+- 在 [BNB 测试网浏览器](https://testnet.bscscan.com/) 查看交易
+
+**默认合约地址:**
+- IDENTITY: `0xf04A7eEeB7f99631DD08D9C6418ED8f9a8A03292`
+- REPUTATION: `0x50100029Ac4E6F42505F5773841c03bcfB60181F`
+- VALIDATION: `0x8366684cCE2266aD632bfE78E784007848E05E3a`
+
+### 跨链操作
+
+使用 `chainId:agentId` 格式可以跨链操作代理:
+
+```python
+# 获取不同链上的代理
+eth_agent = sdk.getAgent("11155111:123")  # Ethereum Sepolia
+base_agent = sdk.getAgent("84532:456")    # Base Sepolia
+bnb_agent = sdk.getAgent("97:789")        # BNB 测试网
+
+# 在多条链上搜索
+results = sdk.searchAgents(
+    name="AI",
+    chains=[11155111, 84532, 97],  # 在 Ethereum、Base 和 BNB 上搜索
+    active=True
+)
+
+# 在所有链上搜索
+results_all = sdk.searchAgents(
+    name="AI",
+    chains="all"  # 在所有支持的链上搜索
+)
+```
 
 ## ✨ 核心特性
 

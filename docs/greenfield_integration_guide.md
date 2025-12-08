@@ -154,7 +154,6 @@ print(f"2. Navigate to your bucket: {BUCKET_NAME}")
 print(f"3. Click 'Upload' and select a file (or create empty object)")
 print(f"4. Confirm the transaction")
 print(f"5. Copy the transaction hash from MetaMask or the explorer")
-print(f"6. Set it in .env as GREENFIELD_TXN_HASH")
 ```
 
 Run:
@@ -177,23 +176,15 @@ python create_object.py
 
 ### Important Notes on Transaction Hash
 
-**Understanding txn_hash Usage:**
 
 The transaction hash is **NOT** the result of uploading data. Instead:
-1. You **first** call `CreateObject` on Greenfield chain → Get txn_hash
-2. You **then** use this txn_hash to upload data via `PutObject`
 
 **Key Points:**
-- **One-Time Use**: Each txn_hash can only be used for **one** PutObject operation
-- **Pre-Created**: You need the txn_hash **before** you can upload data
 - **Workflow**:
   ```
-  CreateObject (chain) → txn_hash → PutObject (storage) → Upload complete
   ```
 
 **Current SDK Limitation:**
-- SDK requires you to provide txn_hash (obtained externally via DCellar/CLI)
-- For testing: Create one object via DCellar, use its txn_hash for initial tests
 - For production: Need to implement CreateObject in code (future enhancement)
 
 **Future Enhancement:**
@@ -201,7 +192,6 @@ In the future, the SDK should automatically call CreateObject before PutObject:
 ```python
 # Future ideal usage (not yet implemented)
 key = storage.put(key="file", data=b"data")
-# SDK internally: CreateObject → get txn_hash → PutObject
 ```
 
 ## Environment Configuration
@@ -215,13 +205,10 @@ GREENFIELD_BUCKET=hubble-reputation-test
 GREENFIELD_PRIVATE_KEY=your_private_key_here  # Without 0x prefix
 
 # Required for PUT operations (see "Getting Transaction Hash")
-GREENFIELD_TXN_HASH=0x1234567890abcdef...
 
 # Optional: Alternative SP hosts for failover testing
 GREENFIELD_SP_HOST_ALT=gnfd-testnet-sp2.bnbchain.org
 
-# Optional: Alternative txn_hash for per-object hash testing
-GREENFIELD_TXN_HASH_ALT=0xabcdef1234567890...
 
 # Optional: Pre-created public object key for public read testing
 GREENFIELD_PUBLIC_TEST_OBJECT=public-test-object-key
@@ -368,7 +355,6 @@ curl -v https://hubble-reputation-test.gnfd-testnet-sp1.bnbchain.org/public-test
 # Verify your wallet has testnet BNB
 curl https://gnfd-testnet-fullnode-tendermint-us.bnbchain.org/balance/{your_address}
 
-# Create a fresh object and get new txn_hash
 # Follow "Getting Transaction Hash" section
 
 # Verify private key matches the wallet that created the bucket
@@ -530,7 +516,6 @@ Estimate costs at: https://docs.bnbchain.org/bnb-greenfield/core-concept/billing
 | `GREENFIELD_SP_HOST` | Yes | Storage Provider endpoint | `gnfd-testnet-sp1.bnbchain.org` |
 | `GREENFIELD_BUCKET` | Yes | Bucket name | `hubble-reputation-test` |
 | `GREENFIELD_PRIVATE_KEY` | Yes | Wallet private key (no 0x) | `abc123...` |
-| `GREENFIELD_TXN_HASH` | For PUT | CreateObject tx hash | `0x123abc...` |
 | `GREENFIELD_PUBLIC_TEST_OBJECT` | For public tests | Public object key | `test-file.txt` |
 | `GREENFIELD_TIMEOUT` | Optional | Request timeout (seconds) | `60` |
 

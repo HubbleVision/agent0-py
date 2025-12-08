@@ -66,7 +66,7 @@ class GreenfieldCreateObjectHelper:
         self.cli_template = cli_template or os.getenv("GREENFIELD_CREATE_OBJECT_CMD_TEMPLATE")
         self.cli_password = os.getenv("GREENFIELD_CLI_PASSWORD", "password123")
         self.cli_config_file = os.getenv("GREENFIELD_CLI_CONFIG_FILE") or os.getenv("GREENFIELD_CLI_CONFIG_PATH")
-        # 默认关闭 --host，依赖 bucket 元信息选择 SP
+        # 默认关闭 --host，由 CLI 根据 bucket 选择 SP；如需强制指定，可显式设置 GREENFIELD_CLI_DISABLE_HOST=0
         self.cli_disable_host = os.getenv("GREENFIELD_CLI_DISABLE_HOST", "1") == "1"
         self._cli_password_file: Optional[str] = None
         self._cli_ready = False

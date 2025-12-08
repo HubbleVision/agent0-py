@@ -86,8 +86,7 @@ class TestSDKContentStorageInitialization:
         'REPUTATION_BACKEND': 'greenfield',
         'GREENFIELD_SP_HOST': 'gnfd-testnet-sp3.bnbchain.org',
         'GREENFIELD_BUCKET': 'env-bucket',
-        'GREENFIELD_PRIVATE_KEY': '0x' + '3' * 64,
-        'GREENFIELD_TXN_HASH': '0x123456'
+        'GREENFIELD_PRIVATE_KEY': '0x' + '3' * 64
     })
     @patch('agent0_sdk.core.sdk.create_reputation_storage')
     def test_sdk_reads_content_storage_config_from_environment(self, mock_create_storage, mock_web3):
@@ -169,17 +168,16 @@ class TestFeedbackManagerContentStorage:
             "tag1": "helpful"
         }
 
-        with patch.dict('os.environ', {'GREENFIELD_TXN_HASH': '0xabcdef'}):
-            feedback = manager.giveFeedback(
-                agentId="84532:1",
-                feedbackFile=feedback_file,
-                feedbackAuth=b"\x00" * 96
-            )
+        feedback = manager.giveFeedback(
+            agentId="84532:1",
+            feedbackFile=feedback_file,
+            feedbackAuth=b"\x00" * 96
+        )
 
         # Verify: content_storage.put was called
         assert mock_storage.put.called
         call_args = mock_storage.put.call_args
-        assert call_args[1]['txn_hash'] == '0xabcdef'
+        assert call_args.kwargs["key"] == ""
 
         # Verify: content_storage.build_uri was called
         assert mock_storage.build_uri.called
@@ -262,7 +260,7 @@ class TestAgentRegisterWithContentStorage:
             rpcUrl="https://base-sepolia.g.alchemy.com/v2/test",
             signer="0x" + "1" * 64,
             reputationBackend="greenfield",
-            greenfield={"spHost": "gnfd-testnet-sp1.bnbchain.org", "bucket": "test-bucket", "privateKey": "0x" + "2" * 64, "txnHash": "0xabcdef"}
+            greenfield={"spHost": "gnfd-testnet-sp1.bnbchain.org", "bucket": "test-bucket", "privateKey": "0x" + "2" * 64}
         )
 
         # Create agent
@@ -275,14 +273,12 @@ class TestAgentRegisterWithContentStorage:
             mock_register.side_effect = set_agent_id
 
             # Execute: Register agent
-            with patch.dict('os.environ', {'GREENFIELD_TXN_HASH': '0xabcdef'}):
-                result = agent.registerIPFS()
+            result = agent.registerIPFS()
 
         # Verify: content_storage.put_json was called
         assert mock_storage.put_json.called
         call_args = mock_storage.put_json.call_args
-        assert call_args[1]['txn_hash'] == '0xabcdef'
-        reg_data = call_args[1]['data']
+        reg_data = call_args.kwargs['data']
         assert reg_data['name'] == 'Test Agent'
         assert reg_data['description'] == 'A test agent'
 

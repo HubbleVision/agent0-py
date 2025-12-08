@@ -7,7 +7,7 @@ maintaining backward compatibility while allowing transparent backend switching.
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .ipfs_client import IPFSClient
 from .storage_interfaces import ReputationStorage
@@ -31,13 +31,12 @@ class IpfsReputationStorage(ReputationStorage):
         """
         self.client = client
 
-    def put(self, key: str, data: bytes, txn_hash: Optional[str] = None) -> str:
+    def put(self, key: str, data: bytes) -> str:
         """Store data on IPFS and return CID.
 
         Args:
             key: Optional key (not used for IPFS, which generates CID automatically)
             data: Binary data to store
-            txn_hash: Optional transaction hash (not used for IPFS, for interface compatibility)
 
         Returns:
             IPFS CID (Content Identifier)

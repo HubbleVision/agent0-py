@@ -48,7 +48,6 @@ uv sync
    # 创建 bucket
    ./gfdcmd bucket create --bucket-name hubble-reputation-test
 
-   # 创建对象（获取 txn_hash）
    ./gfdcmd object put --bucket-name hubble-reputation-test --object-name test-object --file /path/to/test/file
    ```
 
@@ -63,7 +62,6 @@ uv sync
 GREENFIELD_SP_HOST=gnfd-testnet-sp1.bnbchain.org
 GREENFIELD_BUCKET=hubble-reputation-test
 GREENFIELD_PRIVATE_KEY=0xyour_private_key_here
-GREENFIELD_TXN_HASH=0xreal_transaction_hash_from_create_object
 
 # 可选配置
 GREENFIELD_CONTENT_TYPE=application/octet-stream
@@ -72,7 +70,6 @@ GREENFIELD_TIMEOUT=60
 
 **重要提示**：
 - `GREENFIELD_PRIVATE_KEY`: 必须与创建 bucket 和 object 的钱包私钥一致
-- `GREENFIELD_TXN_HASH`: 必须是 CreateObject 操作的真实 transaction hash
 - `GREENFIELD_BUCKET`: 必须是已存在的 bucket 名称
 
 ## 🚀 运行测试
@@ -110,7 +107,6 @@ uv run python tests/run_greenfield_e2e.py large    # 大数据性能测试
 ### 2. 错误处理测试
 
 - ✅ 测试获取不存在的对象（应该抛出异常）
-- ✅ 测试缺少 txn_hash 的情况（应该抛出异常）
 - ✅ 验证异常类型和错误信息
 
 ### 3. 性能测试
@@ -128,15 +124,12 @@ uv run python tests/run_greenfield_e2e.py large    # 大数据性能测试
 
 ### 常见错误及解决方案
 
-#### 1. `txn_hash is required`
 
-**错误**：`ValueError: txn_hash is required for Greenfield PutObject operation`
 
 **原因**：缺少有效的 Transaction Hash
 
 **解决方案**：
 - 确保已执行 CreateObject 操作并获取真实的 Transaction Hash
-- 检查 `.env` 中的 `GREENFIELD_TXN_HASH` 配置
 - 确认 Transaction Hash 格式正确（以 0x 开头）
 
 #### 2. `403 Forbidden`
@@ -194,7 +187,6 @@ uv run python tests/run_greenfield_e2e.py large    # 大数据性能测试
 2. **检查环境变量**：
    ```python
    import os
-   for key in ['GREENFIELD_BUCKET', 'GREENFIELD_SP_HOST', 'GREENFIELD_TXN_HASH']:
        print(f"{key}: {os.getenv(key)}")
    ```
 

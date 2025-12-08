@@ -29,15 +29,12 @@
 
 #### 自动化工作流
 ```python
-# 传统方式（需要外部获取 txn_hash）
 storage = GreenfieldReputationStorage(
     sp_host="...",
     bucket="...",
     private_key="...",
-    txn_hash="0x..."  # 必须预先提供
 )
 
-# 新方式（自动获取 txn_hash）
 from agent0_sdk.core.greenfield_cli import create_e2e_helper
 uploader = await create_e2e_helper(config)
 

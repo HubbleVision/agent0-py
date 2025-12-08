@@ -27,8 +27,6 @@ pip install eth-utils>=2.0.0 eth-account>=0.9.0 requests>=2.31.0
    - ⚠️ **Important**: This txn hash is needed **before** you can upload data via SDK
 
 **Why need txn hash?** Greenfield uses a two-step process:
-1. CreateObject (on-chain) → Returns txn_hash
-2. PutObject (upload data) → Uses txn_hash as authorization
 
 See [detailed explanation](greenfield_integration_guide.md#understanding-greenfields-two-step-upload-process)
 
@@ -43,7 +41,6 @@ export REPUTATION_BACKEND=greenfield
 export GREENFIELD_SP_HOST=gnfd-testnet-sp1.bnbchain.org
 export GREENFIELD_BUCKET=my-test-bucket
 export GREENFIELD_PRIVATE_KEY=your_private_key_without_0x
-export GREENFIELD_TXN_HASH=0x...  # From step 2
 ```
 
 ### 4. Use in Code
@@ -173,7 +170,6 @@ except RuntimeError as e:
 
 ### Learn More
 
-- ❓ **FAQ**: `docs/GREENFIELD_FAQ.md` (common questions, especially about txn_hash)
 - 📖 **Complete Guide**: `docs/greenfield_integration_guide.md` (detailed setup)
 - 💡 **Usage Examples**: `docs/greenfield_usage_examples.md` (code patterns)
 - 📋 **Architecture**: `docs/20251128_1340_bnb_greenfield_reuptation.plan.md`
@@ -206,7 +202,6 @@ For mainnet deployment:
 | `GREENFIELD_SP_HOST` | Yes | `gnfd-testnet-sp1.bnbchain.org` |
 | `GREENFIELD_BUCKET` | Yes | `my-bucket` |
 | `GREENFIELD_PRIVATE_KEY` | Yes | `abc123...` |
-| `GREENFIELD_TXN_HASH` | Optional* | `0x...` |
 
 *Required for upload operations unless provided per-object
 

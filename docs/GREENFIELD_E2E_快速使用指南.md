@@ -78,7 +78,6 @@ uv run python run_greenfield_e2e.py large
 | **二进制** | 数据完整性 | `uv run python run_greenfield_e2e.py binary` | 所有字节值、无损传输 |
 | **大数据** | 性能基准 | `uv run python run_greenfield_e2e.py large` | 1KB 传输、速度测量 |
 | **多对象** | 并发工作流 | `uv run python run_greenfield_e2e.py multi` | 3 个并发对象、唯一密钥 |
-| **事务哈希** | 唯一性验证 | `uv run python run_greenfield_e2e.py multi` | 不同对象、不同 txn_hash |
 | **错误处理** | 异常处理 | `uv run python run_greenfield_e2e.py error` | 不存在对象、无效输入 |
 
 ## 🔍 预期输出
@@ -112,13 +111,11 @@ uv run python run_greenfield_e2e.py large
 print("⏳ 在区块链上创建对象...")
 
 # 2. 获取事务哈希
-txn_hash = "0x1234567890abcdef1234567890abcdef"
 
 # 3. 使用事务哈希上传数据
 print("✅ 对象创建成功，开始上传...")
 
 # 4. 上传到存储提供者
-response = await uploader.put_auto(key="test-file", data=b"test data", txn_hash=txn_hash)
 
 print(f"✅ 上传完成，密钥: {response}")
 ```
@@ -139,7 +136,6 @@ print(f"✅ 上传完成，密钥: {response}")
 
 ### 自动化工作流
 - ✅ **一步操作**：`put_auto()` 自动完成 CreateObject + PutObject
-- ✅ **无需手动获取 txn_hash**：系统自动处理
 - ✅ **错误处理**：完整的异常捕获和重试
 - ✅ **性能优化**：连接池、超时管理
 

@@ -604,7 +604,6 @@ class Agent:
 
             # Upload updated registration file using content_storage or fallback to IPFS
             if self.sdk.content_storage:
-                import os
                 # Use unified content storage (supports IPFS and Greenfield)
                 reg_dict = self.registration_file.to_dict(
                     chain_id=self.sdk.chain_id(),
@@ -612,8 +611,7 @@ class Agent:
                 )
 
                 # Store using content_storage
-                txn_hash = os.getenv("GREENFIELD_TXN_HASH")
-                key = self.sdk.content_storage.put_json(key="", data=reg_dict, txn_hash=txn_hash)
+                key = self.sdk.content_storage.put_json(key="", data=reg_dict)
                 agentUri = self.sdk.content_storage.build_uri(key)
             else:
                 # Fallback to legacy IPFS client
@@ -679,7 +677,6 @@ class Agent:
 
             # Step 3: Upload using content_storage or fallback to IPFS
             if self.sdk.content_storage:
-                import os
                 # Use unified content storage (supports IPFS and Greenfield)
                 reg_dict = self.registration_file.to_dict(
                     chain_id=self.sdk.chain_id(),
@@ -687,8 +684,7 @@ class Agent:
                 )
 
                 # Store using content_storage
-                txn_hash = os.getenv("GREENFIELD_TXN_HASH")
-                key = self.sdk.content_storage.put_json(key="", data=reg_dict, txn_hash=txn_hash)
+                key = self.sdk.content_storage.put_json(key="", data=reg_dict)
                 agentUri = self.sdk.content_storage.build_uri(key)
             else:
                 # Fallback to legacy IPFS client

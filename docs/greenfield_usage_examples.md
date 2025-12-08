@@ -16,10 +16,7 @@ This document provides practical code examples for using BNB Greenfield storage 
 
 Unlike IPFS or S3 where you directly upload and get an ID back, Greenfield uses:
 
-1. **CreateObject** (on-chain) → Get `txn_hash`
-2. **PutObject** (upload data) → Use `txn_hash` for authorization
 
-**Current SDK Limitation**: You must obtain `txn_hash` externally (via DCellar/CLI) before using `storage.put()`.
 
 See [Integration Guide](greenfield_integration_guide.md#understanding-greenfields-two-step-upload-process) for detailed explanation.
 
@@ -57,7 +54,6 @@ storage = GreenfieldReputationStorage(
     sp_host="gnfd-testnet-sp1.bnbchain.org",
     bucket="my-reputation-bucket",
     private_key="your_private_key_without_0x_prefix",
-    txn_hash="0xabcdef123456...",  # From CreateObject transaction
 )
 
 # Upload
@@ -81,7 +77,6 @@ REPUTATION_BACKEND=greenfield  # or "ipfs"
 GREENFIELD_SP_HOST=gnfd-testnet-sp1.bnbchain.org
 GREENFIELD_BUCKET=hubble-reputation-test
 GREENFIELD_PRIVATE_KEY=abc123def456...  # Without 0x prefix
-GREENFIELD_TXN_HASH=0x123abc456def...   # Optional default
 GREENFIELD_TIMEOUT=60
 ```
 
@@ -96,7 +91,6 @@ config = {
     "GREENFIELD_SP_HOST": "gnfd-testnet-sp1.bnbchain.org",
     "GREENFIELD_BUCKET": "my-bucket",
     "GREENFIELD_PRIVATE_KEY": "your_private_key",
-    "GREENFIELD_TXN_HASH": "0x...",
 }
 
 storage = create_reputation_storage(config=config)
@@ -152,21 +146,18 @@ storage = GreenfieldReputationStorage(
     sp_host="gnfd-testnet-sp1.bnbchain.org",
     bucket="my-bucket",
     private_key="key",
-    txn_hash=None,  # No default
 )
 
 # Upload object 1 with its tx hash
 key1 = storage.put(
     key="object-1",
     data=b"data 1",
-    txn_hash="0xabc123..."
 )
 
 # Upload object 2 with different tx hash
 key2 = storage.put(
     key="object-2",
     data=b"data 2",
-    txn_hash="0xdef456..."
 )
 ```
 
@@ -223,12 +214,10 @@ def upload_with_retry(
     key: str,
     data: bytes,
     max_retries: int = 3,
-    txn_hash: Optional[str] = None
 ) -> Optional[str]:
     """Upload with automatic retry on failure."""
     for attempt in range(max_retries):
         try:
-            result_key = storage.put(key=key, data=data, txn_hash=txn_hash)
             print(f"Upload successful: {result_key}")
             return result_key
         except RuntimeError as e:
@@ -256,7 +245,6 @@ key = upload_with_retry(
 try:
     key = storage.put(key="test", data=b"test data")
 except ValueError as e:
-    if "txn_hash is required" in str(e):
         print("Error: You must provide a transaction hash")
         print("Create an object on-chain first and use its tx hash")
     raise
@@ -432,10 +420,8 @@ class MonitoredStorage:
         self.download_count = 0
         self.error_count = 0
 
-    def put(self, key: str, data: bytes, txn_hash=None) -> str:
         try:
             logger.info(f"Uploading: key={key}, size={len(data)} bytes")
-            result = self.storage.put(key=key, data=data, txn_hash=txn_hash)
             self.upload_count += 1
             logger.info(f"Upload success: {result}")
             return result
@@ -487,8 +473,6 @@ class CachedStorage:
         self.cache = {}
         self.cache_ttl = cache_ttl
 
-    def put(self, key: str, data: bytes, txn_hash=None) -> str:
-        result = self.storage.put(key=key, data=data, txn_hash=txn_hash)
         # Cache the data
         self.cache[key] = {
             "data": data,
@@ -544,13 +528,10 @@ def check_storage_health(storage) -> dict:
     test_data = b"health check"
 
     try:
-        # Test write (if txn_hash available)
         try:
             storage.put(key=test_key, data=test_data)
             health["can_write"] = True
         except ValueError as e:
-            if "txn_hash is required" in str(e):
-                health["can_write"] = "skipped_no_txn_hash"
 
         # Test read (try a known public object)
         # Or skip if write wasn't successful
@@ -637,13 +618,11 @@ class ReputationStorageService:
             "errors": 0
         }
 
-    def store_reputation(self, agent_id: str, data: bytes, txn_hash: Optional[str] = None) -> str:
         """Store reputation data for an agent."""
         key = f"reputation/{agent_id}"
 
         try:
             logger.info(f"Storing reputation: agent={agent_id}, size={len(data)}")
-            result = self.storage.put(key=key, data=data, txn_hash=txn_hash)
             self.stats["uploads"] += 1
             logger.info(f"Stored successfully: {result}")
             return result
@@ -677,7 +656,6 @@ service = ReputationStorageService(config={
     "GREENFIELD_SP_HOST": "gnfd-testnet-sp1.bnbchain.org",
     "GREENFIELD_BUCKET": "reputation-data",
     "GREENFIELD_PRIVATE_KEY": "your_key",
-    "GREENFIELD_TXN_HASH": "0x...",
 })
 
 # Store
@@ -692,7 +670,6 @@ print(f"Stats: {service.get_statistics()}")
 
 ## Next Steps
 
-- Check the [FAQ](GREENFIELD_FAQ.md) for common questions (especially about txn_hash)
 - Review the [Integration Testing Guide](greenfield_integration_guide.md) for testing procedures
 - See [Quick Start](GREENFIELD_QUICKSTART.md) for 5-minute setup
 - Check the [Plan Document](20251128_1340_bnb_greenfield_reuptation.plan.md) for architecture details

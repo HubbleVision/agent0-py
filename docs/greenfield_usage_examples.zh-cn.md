@@ -16,10 +16,7 @@
 
 与 IPFS 或 S3 不同，您直接上传并获得 ID 返回，Greenfield 使用：
 
-1. **CreateObject**（链上）→ 获取 `txn_hash`
-2. **PutObject**（上传数据）→ 使用 `txn_hash` 进行授权
 
-**当前 SDK 限制**：您必须在使用 `storage.put()` 之前通过外部方式获取 `txn_hash`（通过 DCellar/CLI）。
 
 详细说明请参见[集成指南](greenfield_integration_guide.md#understanding-greenfields-two-step-upload-process)。
 
@@ -57,7 +54,6 @@ storage = GreenfieldReputationStorage(
     sp_host="gnfd-testnet-sp1.bnbchain.org",
     bucket="my-reputation-bucket",
     private_key="your_private_key_without_0x_prefix",
-    txn_hash="0xabcdef123456...",  # 来自 CreateObject 交易
 )
 
 # 上传
@@ -81,7 +77,6 @@ REPUTATION_BACKEND=greenfield  # 或 "ipfs"
 GREENFIELD_SP_HOST=gnfd-testnet-sp1.bnbchain.org
 GREENFIELD_BUCKET=hubble-reputation-test
 GREENFIELD_PRIVATE_KEY=abc123def456...  # 不带 0x 前缀
-GREENFIELD_TXN_HASH=0x123abc456def...   # 可选默认值
 GREENFIELD_TIMEOUT=60
 ```
 
@@ -96,7 +91,6 @@ config = {
     "GREENFIELD_SP_HOST": "gnfd-testnet-sp1.bnbchain.org",
     "GREENFIELD_BUCKET": "my-bucket",
     "GREENFIELD_PRIVATE_KEY": "your_private_key",
-    "GREENFIELD_TXN_HASH": "0x...",
 }
 
 storage = create_reputation_storage(config=config)
@@ -152,21 +146,18 @@ storage = GreenfieldReputationStorage(
     sp_host="gnfd-testnet-sp1.bnbchain.org",
     bucket="my-bucket",
     private_key="key",
-    txn_hash=None,  # 无默认值
 )
 
 # 上传对象 1 及其交易哈希
 key1 = storage.put(
     key="object-1",
     data=b"data 1",
-    txn_hash="0xabc123..."
 )
 
 # 上传对象 2 及不同交易哈希
 key2 = storage.put(
     key="object-2",
     data=b"data 2",
-    txn_hash="0xdef456..."
 )
 ```
 
@@ -223,12 +214,10 @@ def upload_with_retry(
     key: str,
     data: bytes,
     max_retries: int = 3,
-    txn_hash: Optional[str] = None
 ) -> Optional[str]:
     """上传失败时自动重试。"""
     for attempt in range(max_retries):
         try:
-            result_key = storage.put(key=key, data=data, txn_hash=txn_hash)
             print(f"上传成功：{result_key}")
             return result_key
         except RuntimeError as e:
@@ -256,7 +245,6 @@ key = upload_with_retry(
 try:
     key = storage.put(key="test", data=b"test data")
 except ValueError as e:
-    if "txn_hash is required" in str(e):
         print("错误：您必须提供交易哈希")
         print("首先在链上创建对象并使用其交易哈希")
     raise
@@ -432,10 +420,8 @@ class MonitoredStorage:
         self.download_count = 0
         self.error_count = 0
 
-    def put(self, key: str, data: bytes, txn_hash=None) -> str:
         try:
             logger.info(f"上传：key={key}, size={len(data)} 字节")
-            result = self.storage.put(key=key, data=data, txn_hash=txn_hash)
             self.upload_count += 1
             logger.info(f"上传成功：{result}")
             return result
@@ -487,8 +473,6 @@ class CachedStorage:
         self.cache = {}
         self.cache_ttl = cache_ttl
 
-    def put(self, key: str, data: bytes, txn_hash=None) -> str:
-        result = self.storage.put(key=key, data=data, txn_hash=txn_hash)
         # 缓存数据
         self.cache[key] = {
             "data": data,
@@ -544,13 +528,10 @@ def check_storage_health(storage) -> dict:
     test_data = b"health check"
 
     try:
-        # 测试写入（如果 txn_hash 可用）
         try:
             storage.put(key=test_key, data=test_data)
             health["can_write"] = True
         except ValueError as e:
-            if "txn_hash is required" in str(e):
-                health["can_write"] = "skipped_no_txn_hash"
 
         # 测试读取（尝试已知的公共对象）
         # 或在写入不成功时跳过
@@ -637,13 +618,11 @@ class ReputationStorageService:
             "errors": 0
         }
 
-    def store_reputation(self, agent_id: str, data: bytes, txn_hash: Optional[str] = None) -> str:
         """存储代理的声誉数据。"""
         key = f"reputation/{agent_id}"
 
         try:
             logger.info(f"存储声誉：agent={agent_id}, size={len(data)}")
-            result = self.storage.put(key=key, data=data, txn_hash=txn_hash)
             self.stats["uploads"] += 1
             logger.info(f"存储成功：{result}")
             return result
@@ -677,7 +656,6 @@ service = ReputationStorageService(config={
     "GREENFIELD_SP_HOST": "gnfd-testnet-sp1.bnbchain.org",
     "GREENFIELD_BUCKET": "reputation-data",
     "GREENFIELD_PRIVATE_KEY": "your_key",
-    "GREENFIELD_TXN_HASH": "0x...",
 })
 
 # 存储
@@ -692,7 +670,6 @@ print(f"统计：{service.get_statistics()}")
 
 ## 下一步
 
-- 检查[FAQ](GREENFIELD_FAQ.md)了解常见问题（特别是关于 txn_hash）
 - 查看[集成测试指南](greenfield_integration_guide.md)了解测试程序
 - 参见[快速入门](GREENFIELD_QUICKSTART.md)了解 5 分钟设置
 - 查看[计划文档](20251128_1340_bnb_greenfield_reuptation.plan.md)了解架构详细信息

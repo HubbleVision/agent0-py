@@ -29,12 +29,13 @@ from agent0_sdk import SDK, SearchParams
 from config import CHAIN_ID, RPC_URL, print_config
 
 # Supported chains for multi-chain testing
-SUPPORTED_CHAINS = [11155111, 84532, 80002]  # ETH Sepolia, Base Sepolia, Polygon Amoy
+SUPPORTED_CHAINS = [11155111, 84532, 80002, 97]  # ETH Sepolia, Base Sepolia, Polygon Amoy, BNB Testnet
 
 # Known test agents with feedback (from discovery script)
 TEST_AGENTS_WITH_FEEDBACK = {
     11155111: ["11155111:1377", "11155111:1340"],  # Both have feedback
     84532: ["84532:557", "84532:545", "84532:543", "84532:541", "84532:540", "84532:539", "84532:538", "84532:536"],  # All have feedback and averageScore=5.0
+    97: [],  # BNB Testnet - placeholder for test agents (to be populated after deployment)
 }
 
 # Known agents with reputation (averageScore) for reputation search tests
@@ -42,6 +43,7 @@ TEST_AGENTS_WITH_REPUTATION = {
     11155111: [],  # No agents with calculated averageScore on this chain
     84532: ["84532:557", "84532:545", "84532:543", "84532:541", "84532:540", "84532:539", "84532:538", "84532:536"],  # All have averageScore=5.0
     80002: [],  # No agents with reputation on this chain
+    97: [],  # BNB Testnet - placeholder for test agents (to be populated after deployment)
 }
 
 # Known tags that exist in feedback data

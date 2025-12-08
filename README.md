@@ -165,6 +165,105 @@ summary = sdk.getReputationSummary("11155111:123")
 print(f"Average score: {summary['averageScore']}")
 ```
 
+## Supported Chains
+
+Agent0 SDK supports multiple EVM-compatible chains for agent registration and operations:
+
+| Chain | Chain ID | Status | Default Contracts |
+|-------|----------|--------|-------------------|
+| Ethereum Sepolia | 11155111 | ✅ Active | Yes |
+| Base Sepolia | 84532 | ✅ Active | Yes |
+| Polygon Amoy | 80002 | ✅ Active | Yes |
+| Linea Sepolia | 59141 | ✅ Active | Yes |
+| **BNB Testnet** | **97** | **✅ Active** | **Yes** |
+| **BNB Mainnet** | **56** | **🚧 Coming Soon** | **Pending** |
+
+### Using BNB Chain
+
+**Default contracts are built-in** - just specify `chainId` and you're ready to go!
+
+```python
+from agent0_sdk import SDK
+
+# BNB Testnet - default contracts are already configured!
+sdk = SDK(
+    chainId=97,  # That's all you need - SDK handles the rest
+    rpcUrl="https://data-seed-prebsc-1-s1.bnbchain.org:8545",
+    signer="0xYOUR_PRIVATE_KEY"
+)
+
+# Register agent on BNB Testnet
+agent = sdk.createAgent(
+    name="My BNB Agent",
+    description="Agent running on BNB Chain"
+)
+agent.registerIPFS()  # Requires IPFS config (pinata, etc.)
+print(f"Agent registered on BNB Testnet: {agent.agentId}")  # e.g., "97:1"
+
+# BNB Mainnet (when available)
+sdk_mainnet = SDK(
+    chainId=56,
+    rpcUrl="https://bsc-dataseed.binance.org/",
+    signer="0xYOUR_PRIVATE_KEY"
+)
+```
+
+**Testing custom contracts** (optional - for advanced users):
+
+```python
+# Option 1: Using environment variables (set in .env)
+# BNB_TESTNET_IDENTITY=0xYourCustomContract
+sdk = SDK(chainId=97, rpcUrl="...", signer="...")
+
+# Option 2: Using registryOverrides parameter
+sdk = SDK(
+    chainId=97,
+    rpcUrl="...",
+    signer="...",
+    registryOverrides={
+        97: {
+            "IDENTITY": "0xYourTestContract",
+            "REPUTATION": "0xYourTestContract2",
+            "VALIDATION": "0xYourTestContract3"
+        }
+    }
+)
+```
+
+**Getting Testnet BNB:**
+- Visit the [BNB Testnet Faucet](https://testnet.bnbchain.org/faucet-smart)
+- Connect your wallet and request testnet BNB tokens
+- View transactions on [BNB Testnet Explorer](https://testnet.bscscan.com/)
+
+**Default Contract Addresses:**
+- IDENTITY: `0xf04A7eEeB7f99631DD08D9C6418ED8f9a8A03292`
+- REPUTATION: `0x50100029Ac4E6F42505F5773841c03bcfB60181F`
+- VALIDATION: `0x8366684cCE2266aD632bfE78E784007848E05E3a`
+
+### Multi-Chain Operations
+
+You can work with agents across different chains using the `chainId:agentId` format:
+
+```python
+# Get agents from different chains
+eth_agent = sdk.getAgent("11155111:123")  # Ethereum Sepolia
+base_agent = sdk.getAgent("84532:456")    # Base Sepolia
+bnb_agent = sdk.getAgent("97:789")        # BNB Testnet
+
+# Search across multiple chains
+results = sdk.searchAgents(
+    name="AI",
+    chains=[11155111, 84532, 97],  # Search on Ethereum, Base, and BNB
+    active=True
+)
+
+# Search across all chains
+results_all = sdk.searchAgents(
+    name="AI",
+    chains="all"  # Search on all supported chains
+)
+```
+
 ## IPFS Configuration Options
 
 ```python

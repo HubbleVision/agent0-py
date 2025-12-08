@@ -153,7 +153,6 @@ print(f"2. 导航到您的桶：{BUCKET_NAME}")
 print(f"3. 点击'上传'并选择文件（或创建空对象）")
 print(f"4. 确认交易")
 print(f"5. 从 MetaMask 或浏览器复制交易哈希")
-print(f"6. 在 .env 中设置为 GREENFIELD_TXN_HASH")
 ```
 
 运行：
@@ -176,23 +175,15 @@ python create_object.py
 
 ### 交易哈希的重要注意事项
 
-**理解 txn_hash 用法：**
 
 交易哈希**不是**上传数据的结果。相反：
-1. 您**首先**在 Greenfield 链上调用 `CreateObject` → 获取 txn_hash
-2. 然后**使用**此 txn_hash 通过 `PutObject` 上传数据
 
 **要点：**
-- **一次性使用**：每个 txn_hash 只能用于**一个** PutObject 操作
-- **预先创建**：您需要在上传数据**之前**获得 txn_hash
 - **工作流程**：
   ```
-  CreateObject (链) → txn_hash → PutObject (存储) → 上传完成
   ```
 
 **当前 SDK 限制：**
-- SDK 要求您提供 txn_hash（通过 DCellar/CLI 外部获取）
-- 用于测试：通过 DCellar 创建一个对象，使用其 txn_hash 进行初始测试
 - 用于生产：需要在代码中实现 CreateObject（未来增强功能）
 
 **未来增强功能：**
@@ -200,7 +191,6 @@ python create_object.py
 ```python
 # 未来的理想用法（尚未实现）
 key = storage.put(key="file", data=b"data")
-# SDK 内部：CreateObject → 获取 txn_hash → PutObject
 ```
 
 ## 环境配置
@@ -214,13 +204,10 @@ GREENFIELD_BUCKET=hubble-reputation-test
 GREENFIELD_PRIVATE_KEY=your_private_key_here  # 不带 0x 前缀
 
 # PUT 操作需要（参见"获取交易哈希"）
-GREENFIELD_TXN_HASH=0x1234567890abcdef...
 
 # 可选：故障转移测试的备用 SP 主机
 GREENFIELD_SP_HOST_ALT=gnfd-testnet-sp2.bnbchain.org
 
-# 可选：每对象哈希测试的备用 txn_hash
-GREENFIELD_TXN_HASH_ALT=0xabcdef1234567890...
 
 # 可选：为公共读取测试预创建的公共对象键
 GREENFIELD_PUBLIC_TEST_OBJECT=public-test-object-key
@@ -367,7 +354,6 @@ curl -v https://hubble-reputation-test.gnfd-testnet-sp1.bnbchain.org/public-test
 # 验证您的钱包是否有测试网 BNB
 curl https://gnfd-testnet-fullnode-tendermint-us.bnbchain.org/balance/{your_address}
 
-# 创建新对象并获取新 txn_hash
 # 遵循"获取交易哈希"部分
 
 # 验证私钥与创建桶的钱包匹配
@@ -529,7 +515,6 @@ Greenfield 收费项目：
 | `GREENFIELD_SP_HOST` | 是 | 存储提供商端点 | `gnfd-testnet-sp1.bnbchain.org` |
 | `GREENFIELD_BUCKET` | 是 | 桶名称 | `hubble-reputation-test` |
 | `GREENFIELD_PRIVATE_KEY` | 是 | 钱包私钥（无 0x） | `abc123...` |
-| `GREENFIELD_TXN_HASH` | 对于 PUT | CreateObject 交易哈希 | `0x123abc...` |
 | `GREENFIELD_PUBLIC_TEST_OBJECT` | 对于公共测试 | 公共对象键 | `test-file.txt` |
 | `GREENFIELD_TIMEOUT` | 可选 | 请求超时（秒） | `60` |
 
